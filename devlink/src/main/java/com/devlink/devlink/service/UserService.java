@@ -21,7 +21,7 @@ public class UserService {
         Optional<User> existingUser = userRepository.findByChatId(chatIr);
 
         if (existingUser.isPresent()) {
-            lov.info("✅ user already exists: {}", existingUser.get());
+            log.info("✅ user already exists: {}", existingUser.get());
             return existingUser.get();
         }
 
