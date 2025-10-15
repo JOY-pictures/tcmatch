@@ -17,7 +17,14 @@ public class UserService {
 
     private final UserRepository userRepository;
 
-    public User createUser(Long chatId, String username, String firstName, String lastName) {
+    public User registerFromTelegram(Long chatId, String username, String firstName, String lastName) {
+        Optional<User> existingUser = userRepository.findByChatId(chatIr);
+
+        if (existingUser.isPresent()) {
+            lov.info("✅ user already exists: {}", existingUser.get());
+            return existingUser.get();
+        }
+
         User user = User.builder()
                 .chatId(chatId)
                 .username(username)
