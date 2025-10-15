@@ -1,0 +1,33 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: devlink
+
+  datasource:
+    url: jdbc:h2:mem:devlinkdb
+    username: sa
+    password: 123
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+jpa:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+logging:
+  level:
+    com.devlink: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+telegram:
+  bot:
+    username: ${BOT_USERNAME:DevLinkBot}
+    token: ${BOT_TOKEN:000000000}
