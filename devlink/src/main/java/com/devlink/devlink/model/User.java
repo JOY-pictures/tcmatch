@@ -39,6 +39,13 @@ public class User {
     @Builder.Default
     private LocalDateTime registeredAt = LocalDateTime.now();
 
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private RegistrationStatus registrationStatus =  RegistrationStatus.NOT_REGISTERED;
+
     @Builder.Default
     private LocalDateTime lastActivityAt = LocalDateTime.now();
+
+    private LocalDateTime rulesViewedAt;
+    private LocalDateTime rulesAcceptedAt;
 }
