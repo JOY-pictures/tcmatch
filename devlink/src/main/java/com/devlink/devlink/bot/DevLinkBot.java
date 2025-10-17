@@ -341,6 +341,80 @@ public class DevLinkBot extends TelegramLongPollingBot {
                 break;
         }
     }
+    
+   private void handleProfileCommand(Long chatId) {
+    // ПРОВЕРЯЕМ, завершил ли пользователь регистрацию
+    if (!userService.hasFullAccess(chatId)) {
+        RegistrationStatus status = userService.getRegistrationStatus(chatId);
+        
+        String message = switch (status) {
+            case NOT_REGISTERED -> """
+                ❌ ДОСТУП ЗАКРЫТ
+                
+                Для доступа к профилю необходимо:
+                /register - начать регистрацию
+                """;
+                
+            case REGISTERED -> """
+                ❌ ДОСТУП ЗАКРЫТ
+                
+                Следующий шаг:
+                /rules - ознакомиться с правилами
+                """;
+                
+            case RULES_VIEWED -> """
+                ❌ ДОСТУП ЗАКРУТ
+                
+                Финальный шаг:
+                /accept_rules - принять правила
+                """;
+                
+            default -> "❌ Ошибка статуса. Используйте /start";
+        };
+        
+        sendMessage(chatId, message);
+        return;
+    }
+    
+    // ЕСЛИ регистрация завершена - показываем профиль
+    User user = userService.findByChatId(chatId).orElseThrow();
+    
+    // Форматируем даты
+    String registeredDate = user.getRegisteredAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+    String rulesAcceptedDate = user.getRulesAcceptedAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
+    
+    String profileText = """
+        👤 ВАШ ПРОФИЛЬ DEVLINK
+        
+        📝 Имя: %s %s
+        🔗 Username: @%s
+        💼 Роль: %s
+        ⭐ Рейтинг: %.1f/5.0
+        📅 В системе с: %s
+        ✅ Правила приняты: %s
+        
+        💡 Статистика:
+        • Завершенных сделок: 0
+        • Открытых проектов: 0
+        • Активных откликов: 0
+        
+        🛠️ Доступные действия:
+        /browse - найти проекты (скоро)
+        /new_project - создать проект (скоро)
+        /help - все команды
+        """.formatted(
+            user.getFirstName(),
+            user.getLastName() != null ? user.getLastName() : "",
+            user.getUsername() != null ? user.getUsername() : "не указан",
+            user.getRole(),
+            user.getRating(),
+            registeredDate,
+            rulesAcceptedDate
+        );
+    
+    sendMessage(chatId, profileText);
+    log.info("📊 Profile shown for user: {}", chatId);
+}
 
     private void handleHelpCommand(Long chatId) {
         String helpText = """
