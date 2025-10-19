@@ -3,4 +3,13 @@
   <component name="JpaBuddyIdeaProjectConfig">
     <option name="renamerInitialized" value="true" />
   </component>
+  <component name="PersistenceUnitSettings">
+    <persistence-units>
+      <persistence-unit moduleName="devlink" name="Default">
+        <packages>
+          <package value="com.devlink.devlink" />
+        </packages>
+      </persistence-unit>
+    </persistence-units>
+  </component>
 </project>

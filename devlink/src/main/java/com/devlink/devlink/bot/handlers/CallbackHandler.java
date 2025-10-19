@@ -4,6 +4,7 @@ package com.devlink.devlink.bot.handlers;
 import com.devlink.devlink.bot.keyboards.KeyboardFactory;
 import com.devlink.devlink.model.RegistrationStatus;
 import com.devlink.devlink.model.User;
+import com.devlink.devlink.service.NavigationService;
 import com.devlink.devlink.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class CallbackHandler {
 
     private final UserService userService;
     private final KeyboardFactory keyboardFactory;
+    private final NavigationService navigationService;
     private AbsSender sender;
 
     public void setSender(AbsSender sender) {
@@ -30,10 +32,18 @@ public class CallbackHandler {
     }
 
     public void handleCallback(Long chatId, String callbackData, String userName, Integer messageId) {
+
+        log.info("🔄 Handling callback: {} from user {}", callbackData, chatId);
+
         String[] parts = callbackData.split(":");
         String actionType = parts[0];
         String action = parts[1];
         String parameter = parts.length > 2 ? parts[2] : null;
+
+        if (!"navigation".equals(actionType) || !"back".equals(action)) {
+            String currentScreen = actionType + ":" + action + (parameter != null ? ":" + parameter: "");
+            navigationService.pushScreen(chatId, currentScreen);
+        }
 
         switch (actionType) {
             case "menu":
@@ -48,10 +58,59 @@ public class CallbackHandler {
             case "projects":
                 handleProjectAction(chatId, action, parameter, messageId);
                 break;
+            case "navigation":
+                handleNavigationAction(chatId, action, parameter, messageId);
+                break;
+            default:
+                log.warn("⚠️ Unknown action type: {}", actionType);
+                showMainMenu(chatId, messageId);
         }
     }
 
-    public void handleMenuAction(Long chatId, String action, Integer messageId) {
+    private void handleNavigationAction(Long chatId, String action, String parameter, Integer messageId) {
+        if ("back".equals(action)) {
+            String previousScreen = navigationService.popScreen(chatId);
+            log.info("📱 Navigation back: {} -> {}", chatId, previousScreen);
+
+            navigateToScreen(chatId, previousScreen, messageId);
+        }
+    }
+
+    private void navigateToScreen(Long chatId, String screen, Integer messageId) {
+        log.debug("📱 Navigating to screen: {} for user {}", screen, chatId);
+
+        String[] screenParts = screen.split(":");
+        String screenType = screenParts[0];
+        String screenAction = screenParts[1];
+        String screenParam = screenParts.length > 2 ? screenParts[2] : null;
+
+        switch (screenType) {
+            case "main":
+                showMainMenu(chatId, messageId);
+                break;
+            case "menu":
+                handleMenuAction(chatId, screenAction, messageId);
+                break;
+            case "project":
+                handleProjectAction(chatId, screenAction, screenParam, messageId);
+                break;
+            case "rules":
+                handleRulesAction(chatId, screenAction, "User", messageId);
+                break;
+            default:
+                log.warn("⚠️ Unknown screen type: {}, showing main menu", screenType);
+                showMainMenu(chatId, messageId);
+        }
+    }
+
+    private void showMainMenu(Long chatId, Integer messageId) {
+        String text = "🔗 Добро пожаловать в DevLink!\n\nВыберите действие:";
+        InlineKeyboardMarkup keyboard = keyboardFactory.createMainMenuKeyboard();
+        editMessage(chatId, messageId, text, keyboard);
+        log.info("📱 Showing main menu for user {}", chatId);
+    }
+
+    private void handleMenuAction(Long chatId, String action, Integer messageId) {
         switch (action) {
             case "profile":
                 showUserProfile(chatId, messageId);
@@ -133,7 +192,7 @@ public class CallbackHandler {
         };
     }
 
-    public void handleRegistrationAction(Long chatId, String action, String userName, Integer messageId) {
+    private void handleRegistrationAction(Long chatId, String action, String userName, Integer messageId) {
         switch (action) {
             case "start":
                 startRegistration(chatId, userName, messageId);
@@ -143,7 +202,7 @@ public class CallbackHandler {
         }
     }
 
-    public void handleRulesAction(Long chatId, String action, String userName, Integer messageId) {
+    private void handleRulesAction(Long chatId, String action, String userName, Integer messageId) {
         switch (action) {
             case "view":
                 showFullRules(chatId, messageId);
@@ -159,13 +218,13 @@ public class CallbackHandler {
         }
     }
 
-    public void handleProjectAction(Long chatId, String action, String parameter, Integer messageId) {
+    private void handleProjectAction(Long chatId, String action, String parameter, Integer messageId) {
         String text = "🚧 Раздел проектов в разработке...";
         InlineKeyboardMarkup keyboard = keyboardFactory.createMainMenuKeyboard();
         editMessage(chatId, messageId, text, keyboard);
     }
 
-    public void startRegistration(Long chatId, String userName, Integer messageId) {
+    private void startRegistration(Long chatId, String userName, Integer messageId) {
         if (userService.userExists(chatId)) {
             // Показываем текущий статус регистрации
             RegistrationStatus status = userService.getRegistrationStatus(chatId);
@@ -274,7 +333,7 @@ public class CallbackHandler {
                 user.getRegisteredAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
         );
 
-        InlineKeyboardMarkup keyboard = keyboardFactory.createMainMenuKeyboard();
+        InlineKeyboardMarkup keyboard = keyboardFactory.createBackButton();
         editMessage(chatId, messageId, profileText, keyboard);
     }
 

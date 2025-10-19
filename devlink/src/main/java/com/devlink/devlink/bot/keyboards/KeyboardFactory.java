@@ -31,6 +31,47 @@ public class KeyboardFactory {
         }
     }
 
+    public InlineKeyboardMarkup createBackButton() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back") // Универсальный callback для возврата
+                .build());
+        rows.add(row);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    public InlineKeyboardMarkup createActionWithBack(List<InlineKeyboardButton> action) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        if (action != null && !action.isEmpty()) {
+            for (int i = 0; i < action.size(); i += 2) {
+                List<InlineKeyboardButton> actionRow = new ArrayList<>();
+                actionRow.add(action.get(i));
+                if (i + 1 < action.size()) {
+                    actionRow.add(action.get(i+1));
+                }
+                rows.add(actionRow);
+            }
+        }
+
+        List<InlineKeyboardButton> backRow = new ArrayList<>();
+        backRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
+        rows.add(backRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
     public InlineKeyboardMarkup createUnauthorizedUserKeyboard() {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
@@ -90,12 +131,12 @@ public class KeyboardFactory {
                         .build());
                 rows.add(row3);
 
-                List<InlineKeyboardButton> row4 = new ArrayList<>();
-                row4.add(InlineKeyboardButton.builder()
-                        .text("📜 Перечитать правила")
-                        .callbackData("rules:view")
-                        .build());
-                rows.add(row4);
+//                List<InlineKeyboardButton> row4 = new ArrayList<>();
+//                row4.add(InlineKeyboardButton.builder()
+//                        .text("📜 Перечитать правила")
+//                        .callbackData("rules:view")
+//                        .build());
+//                rows.add(row4);
                 break;
             case RULES_ACCEPTED:
                 // Если статус RULES_ACCEPTED - возвращаем главное меню
@@ -115,7 +156,6 @@ public class KeyboardFactory {
         }
 
     public InlineKeyboardMarkup createMainMenuKeyboard() {
-        System.out.println("ha");
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
