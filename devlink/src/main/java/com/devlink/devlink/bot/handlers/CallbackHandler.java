@@ -15,6 +15,8 @@ import org.telegram.telegrambots.meta.bots.AbsSender;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 @RequiredArgsConstructor
@@ -27,11 +29,24 @@ public class CallbackHandler {
     private final NavigationService navigationService;
     private AbsSender sender;
 
+    private final Map<Long, Long> lastClickTime = new ConcurrentHashMap<>();
+    private static final long CLICK_COOLDOWN_MS = 500;
+
     public void setSender(AbsSender sender) {
         this.sender = sender;
     }
 
     public void handleCallback(Long chatId, String callbackData, String userName, Integer messageId) {
+
+        long currentTime = System.currentTimeMillis();
+        Long lastTime = lastClickTime.get(chatId);
+
+        if (lastTime != null && (currentTime - lastTime) < CLICK_COOLDOWN_MS) {
+            log.debug("⏳ Click cooldown for user: {}", chatId);
+            return; // Игнорируем быстрое повторное нажатие
+        }
+
+        lastClickTime.put(chatId, currentTime);
 
         log.info("🔄 Handling callback: {} from user {}", callbackData, chatId);
 
