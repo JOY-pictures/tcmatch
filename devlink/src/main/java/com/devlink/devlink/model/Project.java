@@ -29,7 +29,7 @@ public class Project {
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
-    private ProjectStatus statu = ProjectStatus.OPEN;
+    private ProjectStatus status = ProjectStatus.OPEN;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", nullable = false)
@@ -41,7 +41,10 @@ public class Project {
 
     private LocalDateTime deadline;
 
+    @Builder.Default
     private LocalDateTime createdAt;
+
+    private LocalDateTime startedAt;
     private LocalDateTime completedAt;
 
     private String requiredSkills;
