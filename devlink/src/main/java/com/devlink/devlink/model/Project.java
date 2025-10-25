@@ -39,13 +39,13 @@ public class Project {
     @JoinColumn(name = "freelancer_id")
     private User freelancer;
 
-    private LocalDateTime deadline;
+    private LocalDateTime deadline = LocalDateTime.now();
 
     @Builder.Default
-    private LocalDateTime createdAt;
+    private LocalDateTime createdAt = LocalDateTime.now();
 
-    private LocalDateTime startedAt;
-    private LocalDateTime completedAt;
+    private LocalDateTime startedAt = LocalDateTime.now();
+    private LocalDateTime completedAt = LocalDateTime.now();
 
     private String requiredSkills;
     private Integer estimatedDays;

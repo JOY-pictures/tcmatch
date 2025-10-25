@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -132,5 +133,9 @@ public class ApplicationService {
 
     public long getActiveApplicationsCount(Long chatId) {
         return applicationRepository.countActiveApplicationsByFreelancer(chatId);
+    }
+
+    public Optional<Application> getApplicationById(Long applicationId) {
+        return applicationRepository.findById(applicationId);
     }
 }

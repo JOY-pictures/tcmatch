@@ -1,0 +1,357 @@
+package com.devlink.devlink.service;
+
+import com.devlink.devlink.model.*;
+import com.devlink.devlink.repository.OrderRepository;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cglib.core.Local;
+import org.springframework.stereotype.Service;
+
+import javax.management.RuntimeErrorException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final ProjectService projectService;
+    private final ApplicationService applicationService;
+    private final UserService userService;
+
+    //Создание заказа из принятой заявки
+    @Transactional
+    public Order createdOrderFromApplication(long applicationId) {
+        Application application = applicationService.getApplicationById(applicationId).orElseThrow(() -> new RuntimeException("Заявка не найдена"));
+
+        // Проверяем, что заявка принята
+        if (application.getStatus() != ApplicationStatus.ACCEPTED) {
+            throw new RuntimeException("Нельзя создать заказ из непринятой заявки");
+        }
+
+        Project project = application.getProject();
+
+        // Проверяем, что проект еще открыт
+        if (project.getStatus() != ProjectStatus.OPEN) {
+            throw new RuntimeException("Проект уже закрыт");
+        }
+
+        // Создаем этапы оплаты (по умолчанию: 30% аванс, 70% по завершении)
+
+        List<PaymentStage> paymentStages = createDefaultPaymentStages(project.getBudget());
+
+        Order order = Order.builder()
+                .project(project)
+                .application(application)
+                .customer(project.getCustomer())
+                .freelancer(project.getFreelancer())
+                .title(project.getTitle())
+                .description(project.getDescription())
+                .totalBudget(project.getBudget())
+                .estimatedDays(project.getEstimatedDays())
+                .customerRequirements(project.getDescription())
+                .paymentStages(paymentStages)
+                .deadline(LocalDateTime.now().plusDays(project.getEstimatedDays()))
+                .build();
+
+        projectService.updateProjectStatus(project.getId(), ProjectStatus.IN_PROGRESS);
+
+        Order savedOrder = orderRepository.save(order);
+
+        log.info("✅ Создан заказ {} из заявки {} на проект {}", savedOrder.getId(), applicationId, project.getId());
+
+        return savedOrder;
+    }
+
+    //Создание этапов оплаты по умолчанию
+    private List<PaymentStage> createDefaultPaymentStages(Double totalBudget) {
+        List<PaymentStage> stages = new ArrayList<>();
+
+        // Аванс 30%
+        stages.add(PaymentStage.builder()
+                .name("Аванс")
+                .description("Предоплата за начало работы")
+                .amount(totalBudget * 0.3)
+                .percentage(30)
+                .build());
+
+        // Финальная оплата 70%
+        stages.add(PaymentStage.builder()
+                .name("Финальная оплата")
+                .description("оплата после приемки работы")
+                .amount(totalBudget * 0.7)
+                .percentage(70)
+                .build());
+        return stages;
+    }
+
+    //Начать работу над заказом
+    @Transactional
+    public Order startOrder(Long orderId) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        if (order.getStatus() != OrderStatus.CREATED) {
+            throw new RuntimeException("Заказ уже начат или завершен");
+        }
+
+        order.setStatus(OrderStatus.IN_PROGRESS);
+        order.setStartedAt(LocalDateTime.now());
+
+        Order updatedOrder = orderRepository.save(order);
+        log.info("🚀 Заказ {} начат", orderId);
+
+        return updatedOrder;
+    }
+
+
+    //Отправить работу на проверку
+    @Transactional
+    public Order submitWork(Long orderId, String workResult) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        if (order.getStatus() != OrderStatus.IN_PROGRESS) {
+            throw new RuntimeException("Заказ не в процессе выполнения");
+        }
+
+        order.setStatus(OrderStatus.UNDER_REVIEW);
+        order.setWorkResult(workResult);
+
+        Order updatedOrder = orderRepository.save(order);
+        log.info("📤 Работа по заказу {} отправлена на проверку", orderId);
+
+        return updatedOrder;
+    }
+
+    //Принять работу
+    @Transactional
+    public Order acceptWork(Long orderId, Long customerChatId) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        // Проверяем, что пользователь является заказчиком
+        if (!order.getCustomer().getChatId().equals(customerChatId)) {
+            throw new RuntimeException("Только заказчик может принимать работу");
+        }
+
+        if (order.getStatus() != OrderStatus.UNDER_REVIEW) {
+            throw new RuntimeException("Работа не на проверке");
+        }
+
+        order.setStatus(OrderStatus.COMPLETED);
+        order.setCompletedAt(LocalDateTime.now());
+
+        // Помечаем все этапы оплаты как выполненные
+        order.getPaymentStages().forEach(stage -> {
+            stage.setIsCompleted(true);
+            stage.setCompletedAt(LocalDateTime.now());
+        });
+
+        Order updatedOrder = orderRepository.save(order);
+
+        // Обновляем проект
+        projectService.updateProjectStatus(order.getProject().getId(), ProjectStatus.COMPLETED);
+        log.info("✅ Работа по заказу {} принята", orderId);
+        return updatedOrder;
+    }
+
+    //Отменить заказ
+    @Transactional
+    public Order cancelOrder(Long orderId, Long userChatId, String reason) {
+        Order order = orderRepository.findById(userChatId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        // Проверяем, что пользователь является участником заказа
+
+        if (!order.getCustomer().getChatId().equals(userChatId) &&
+                !order.getFreelancer().getChatId().equals(userChatId)) {
+            throw new RuntimeException("Только участники заказа могут его отменять");
+        }
+
+        order.setStatus(OrderStatus.CANCELLED);
+
+        projectService.updateProjectStatus(order.getProject().getId(), ProjectStatus.OPEN);
+
+        Order updatedOrder = orderRepository.save(order);
+        log.info("❌ Заказ {} отменен по причине: {}", orderId, reason);
+
+        return updatedOrder;
+    }
+
+    //Запросить правки
+    @Transactional
+    public Order requestRevision(Long orderId, Long customerChatId, String revisionNotes) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        // Проверяем, что пользователь является заказчиком
+        if (!order.getCustomer().getChatId().equals(customerChatId)) {
+            throw new RuntimeException("Только заказчик может запрашивать правки");
+        }
+
+        if (order.getStatus() != OrderStatus.UNDER_REVIEW) {
+            throw new RuntimeException("Работа не на проверке");
+        }
+
+        if (order.getRevisionCount() >= order.getMaxRevisions()) {
+            throw new RuntimeException("Достигнут лимит правок");
+        }
+
+        order.setStatus(OrderStatus.REVISION);
+        int newRevisionCount = order.getRevisionCount();
+        order.setRevisionCount(newRevisionCount + 1);
+
+        // Сохраняем текущие комментарии к правке
+        order.setCurrentRevisionNotes(revisionNotes);
+
+        // Добавляем в историю правок
+        RevisionNote revisionNote = RevisionNote.builder()
+                .notes(revisionNotes)
+                .createdAt(LocalDateTime.now())
+                .revisionNumber(newRevisionCount)
+                .requestedBy("CUSTOMER")
+                .build();
+
+        order.getRevisionHistory().add(revisionNote);
+
+        Order updateOrder = orderRepository.save(order);
+        log.info("🔄 Запрошены правки по заказу {} (правка #{})", orderId, newRevisionCount);
+        return updateOrder;
+    }
+
+    @Transactional
+    public Order markRevisionResolved(Long orderId, Long freelancerChatId, String workResult) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        // Проверяем, что пользователь является исполнителем
+        if (!order.getFreelancer().getChatId().equals(freelancerChatId)) {
+            throw new RuntimeException("Только исполнитель может отмечать правки как исправленные");
+        }
+
+        if (order.getStatus() != OrderStatus.REVISION) {
+            throw new RuntimeException("Заказ не в статусе правок");
+        }
+
+        // Отмечаем последнюю правку как исправленную
+        if (!order.getRevisionHistory().isEmpty()) {
+            RevisionNote lastRevision = order.getRevisionHistory().get(order.getRevisionCount() - 1);
+            lastRevision.setIsResolved(true);
+            lastRevision.setCreatedAt(LocalDateTime.now());
+        }
+
+        if (workResult != null) {
+            order.setWorkResult(workResult);
+        }
+
+        // Очищаем текущие комментарии к правке
+        order.setCurrentRevisionNotes(null);
+
+        // Возвращаем на проверку
+        order.setStatus(OrderStatus.UNDER_REVIEW);
+
+        Order updateOrder = orderRepository.save(order);
+        log.info("✅ Исполнитель отметил правку как исправленную по заказу {}", orderId);
+
+        return updateOrder;
+    }
+
+    @Transactional
+    public Order requestClarification(Long orderId, Long freelancerChatId, String question) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        if (!order.getFreelancer().getChatId().equals(freelancerChatId)) {
+            throw new RuntimeException("Только исполнитель может запрашивать уточнения");
+        }
+
+        if (order.getStatus() != OrderStatus.IN_PROGRESS) {
+            throw new RuntimeException("Уточнения можно запрашивать только во время работы");
+        }
+
+        if (order.getClarificationCount() >= order.getMaxClarifications()) {
+            throw new RuntimeException("Достигнут лимит уточнений (" + order.getMaxClarifications() + ")");
+        }
+
+        order.setStatus(OrderStatus.AWAITING_CLARIFICATION);
+        int newClarificationCount = order.getClarificationCount() + 1;
+        order.setClarificationCount(newClarificationCount);
+
+        // Добавляем в историю как УТОЧНЕНИЕ
+        RevisionNote clarificationNote = RevisionNote.builder()
+                .notes(question)
+                .createdAt(LocalDateTime.now())
+                .revisionNumber(newClarificationCount)
+                .requestedBy("FREELANCER")
+                .noteType("CLARIFICATION")
+                .build();
+        order.getRevisionHistory().add(clarificationNote);
+        Order updatedOrder = orderRepository.save(order);
+
+        log.info("❓ Запрошено УТОЧНЕНИЕ по заказу {} (уточнение #{})", orderId, newClarificationCount);
+        return updatedOrder;
+    }
+
+    //Обновить этап оплаты
+    @Transactional
+    public Order updatePaymentStage(Long orderId, Integer stageIndex, String paymentProof) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        if (stageIndex < 0 || stageIndex >= order.getPaymentStages().size()) {
+            throw new RuntimeException("Неверный индекс этапа");
+        }
+
+        PaymentStage stage = order.getPaymentStages().get(stageIndex);
+        stage.setIsPaid(true);
+        stage.setPaymentProof(paymentProof);
+        stage.setPaidAt(LocalDateTime.now());
+
+        Order updatedOrder = orderRepository.save(order);
+        log.info("💰 Этап {} заказа {} отмечен как оплаченный", stageIndex, orderId);
+        return updatedOrder;
+    }
+
+    @Transactional
+    public Order providedClarification(Long orderId, Long customerChatId, String answer) {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
+
+        // Проверяем, что пользователь является заказчиком
+        if (!order.getCustomer().getChatId().equals(customerChatId)) {
+            throw new RuntimeException("Только заказчик может отвечать на уточнения");
+        }
+
+        if (order.getStatus() != OrderStatus.AWAITING_CLARIFICATION) {
+            throw new RuntimeException("Заказ не ожидает уточнения");
+        }
+
+        Optional<RevisionNote> lastClarification = order.getRevisionHistory().stream().filter(note -> "CLARIFICATION".equals(note.getNoteType()) && !note.getIsResolved())
+                .reduce((first, second) -> second);
+
+        if (lastClarification.isPresent()) {
+            RevisionNote clarification = lastClarification.get();
+            clarification.setResolutionNotes(answer);
+            clarification.setIsResolved(true);
+            clarification.setResolvedAt(LocalDateTime.now());
+        }
+
+        order.setStatus(OrderStatus.IN_PROGRESS);
+
+        Order updatedOrder = orderRepository.save(order);
+        log.info("✅ Дан ответ на уточнение по заказу {}", orderId);
+
+        return updatedOrder;
+    }
+
+    //Получить заказы пользователя
+    public List<Order> getUserOrders(Long chatId) {
+        return orderRepository.findByUserChatId(chatId);
+    }
+
+    //Получить заказ по ID
+    public Optional<Order> getOrderById(Long orderId) {
+        return orderRepository.findById(orderId);
+    }
+
+    public long getActiveOrderCount(Long chatId) {
+        return orderRepository.countActiveOrdersByUserChatId(chatId);
+    }
+}
