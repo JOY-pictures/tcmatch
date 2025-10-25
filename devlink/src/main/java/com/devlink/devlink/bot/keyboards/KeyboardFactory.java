@@ -2,6 +2,7 @@ package com.devlink.devlink.bot.keyboards;
 
 
 import com.devlink.devlink.model.RegistrationStatus;
+import com.devlink.devlink.service.ProjectSearchService;
 import com.devlink.devlink.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.util.List;
 public class KeyboardFactory {
 
     private final UserService userService;
+    private final ProjectSearchService projectSearchService;
 
     public InlineKeyboardMarkup getKeyboardForUser(Long chatId) {
 
@@ -44,6 +46,120 @@ public class KeyboardFactory {
 
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;
+    }
+
+    public InlineKeyboardMarkup createSearchFiltersKeyboard(String currentFilter) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // Фильтры
+        List<InlineKeyboardButton> filterRow1 = new ArrayList<>();
+        filterRow1.add(createFilterButton("Все", "", currentFilter));
+        filterRow1.add(createFilterButton("До 10к", "budget:10000", currentFilter));
+        filterRow1.add(createFilterButton("До 50к", "budget:50000", currentFilter));
+        rows.add(filterRow1);
+
+        List<InlineKeyboardButton> filterRow2 = new ArrayList<>();
+        filterRow2.add(createFilterButton("Срочные", "urgent", currentFilter));
+        filterRow2.add(createFilterButton("Без опыта", "junior", currentFilter));
+        rows.add(filterRow2);
+
+        // Кнопка поиска
+        List<InlineKeyboardButton> searchRow = new ArrayList<>();
+        searchRow.add(InlineKeyboardButton.builder()
+                .text("🔍 Начать поиск")
+                .callbackData("project:search")
+                .build());
+        rows.add(searchRow);
+
+
+        // Назад
+        List<InlineKeyboardButton> backRow = new ArrayList<>();
+        backRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back:main")
+                .build());
+        rows.add(backRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // Метод для клавиатуры пагинации
+    public InlineKeyboardMarkup createPaginationKeyboard(String filter, Long chatId) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // Пагинация
+        List<InlineKeyboardButton> paginationRow = new ArrayList<>();
+
+        if (projectSearchService.hasPrevPage(chatId)) {
+            paginationRow.add(InlineKeyboardButton.builder()
+                    .text("◀️ Пред.")
+                    .callbackData("project:page:prev:" + filter)
+                    .build());
+        }
+
+        paginationRow.add(InlineKeyboardButton.builder()
+                .text("📄 " + (projectSearchService.getCurrentPage(chatId) + 1))
+                .callbackData("project:page:current")
+                .build());
+
+        if (projectSearchService.hasNextPage(chatId)) {
+            paginationRow.add(InlineKeyboardButton.builder()
+                    .text("След. ▶️")
+                    .callbackData("project:page:next:" + filter)
+                    .build());
+        }
+
+        rows.add(paginationRow);
+
+        // Фильтры
+        List<InlineKeyboardButton> filterRow = new ArrayList<>();
+        filterRow.add(InlineKeyboardButton.builder()
+                .text("⚙️ Фильтры")
+                .callbackData("project:filters:" + filter)
+                .build());
+        rows.add(filterRow);
+
+        // Назад
+        List<InlineKeyboardButton> backRow = new ArrayList<>();
+        backRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад в меню")
+                .callbackData("navigation:back:main")
+                .build());
+        rows.add(backRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // Метод для превью проекта
+    public InlineKeyboardMarkup createProjectPreviewKeyboard(Long projectId) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(InlineKeyboardButton.builder()
+                .text("📋 Детали")
+                .callbackData("project:details:" + projectId)
+                .build());
+        row.add(InlineKeyboardButton.builder()
+                .text("✅ Откликнуться")
+                .callbackData("project:apply:" + projectId)
+                .build());
+        rows.add(row);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    private InlineKeyboardButton createFilterButton(String text, String filter, String currentFilter) {
+        String prefix = filter.equals(currentFilter) ? "✅ " : "";
+        return InlineKeyboardButton.builder()
+                .text(prefix + text)
+                .callbackData("project:filter:" + filter)
+                .build();
     }
 
     public InlineKeyboardMarkup createActionWithBack(List<InlineKeyboardButton> action) {

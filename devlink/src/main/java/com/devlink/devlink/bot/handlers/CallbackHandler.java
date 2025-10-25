@@ -2,19 +2,25 @@ package com.devlink.devlink.bot.handlers;
 
 
 import com.devlink.devlink.bot.keyboards.KeyboardFactory;
+import com.devlink.devlink.model.Project;
 import com.devlink.devlink.model.RegistrationStatus;
 import com.devlink.devlink.model.User;
 import com.devlink.devlink.service.NavigationService;
+import com.devlink.devlink.service.ProjectSearchService;
 import com.devlink.devlink.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.bots.AbsSender;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,8 +33,10 @@ public class CallbackHandler {
     private final UserService userService;
     private final KeyboardFactory keyboardFactory;
     private final NavigationService navigationService;
+    private final ProjectSearchService projectSearchService;
     private AbsSender sender;
 
+    private final Map<Long, List<Integer>> userProjectMessages = new ConcurrentHashMap<>();
     private final Map<Long, Long> lastClickTime = new ConcurrentHashMap<>();
     private static final long CLICK_COOLDOWN_MS = 500;
 
@@ -70,8 +78,11 @@ public class CallbackHandler {
             case "rules":
                 handleRulesAction(chatId, action, userName, messageId);
                 break;
-            case "projects":
+            case "project":
                 handleProjectAction(chatId, action, parameter, messageId);
+                break;
+            case "order":
+                handleOrderAction(chatId, action, parameter, messageId);
                 break;
             case "navigation":
                 handleNavigationAction(chatId, action, parameter, messageId);
@@ -82,12 +93,207 @@ public class CallbackHandler {
         }
     }
 
+    private void handleOrderAction(Long chatId, String action, String parameter, Integer messageId) {
+        switch (action) {
+            case "view":
+                showOrderDetails(chatId, Long.parseLong(parameter), messageId);
+                break;
+            case "list":
+                showUserOrders(chatId, messageId);
+                break;
+            case "start":
+                startOrder(chatId, Long.parseLong(parameter), messageId);
+                break;
+            case "submit":
+                showSubmitWorkForm(chatId, Long.parseLong(parameter), messageId);
+                break;
+            case "accept":
+                acceptWork(chatId, Long.parseLong(parameter), messageId);
+                break;
+            case "revision":
+                showRevisionForm(chatId, Long.parseLong(parameter), messageId);
+                break;
+            case "resolve_revision":
+                resolveRevision(chatId, Long.parseLong(parameter), messageId);
+                break;
+
+        }
+    }
+
+    private void handleProjectAction(Long chatId, String action, String parameter, Integer messageId) {
+        switch (action) {
+            case "search":
+                showProjectsSearch(chatId, messageId, parameter != null ? parameter : "");
+                break;
+            case "filters":
+                showSearchFilters(chatId, messageId, parameter != null ? parameter : "");
+                break;
+            case"filter":
+                applyFilter(chatId, messageId, parameter);
+                break;
+            case "page":
+                handlePageNavigation(chatId, parameter, messageId);
+                break;
+            case "details":
+                showProjectDelails(chatId, Long.parseLong(parameter), messageId);
+                break;
+            case "apply":
+                showApplyForm(chatId, Long.parseLong(parameter), messageId);
+                break;
+        }
+    }
+
+    private void showProjectsSearch(Long chatId, Integer messageId, String filter) {
+        try {
+            List<Project> pageProjects = projectSearchService.getPageProjects(chatId, filter);
+            ProjectSearchService.SearchState stage = projectSearchService.getOrCreateSearchState(chatId, filter);
+
+            if (pageProjects.isEmpty()) {
+                String text = "🔍 Проекты не найдены\n\nПопробуйте изменить фильтры поиска";
+
+                InlineKeyboardMarkup keyboard = keyboardFactory.createSearchFiltersKeyboard(filter);
+                editMessage(chatId, messageId, text, keyboard);
+                return;
+            }
+
+            // УДАЛЯЕМ предыдущие сообщения с проектами (если есть)
+            deletePreviousProjectMessages(chatId);
+
+            // ОТПРАВЛЯЕМ новые сообщения с проектами
+            List<Integer> newMessageIds = new ArrayList<>();
+            for (int i = 0; i < pageProjects.size(); i++) {
+                Project project = pageProjects.get(i);
+                String projectText = formatProjectPreview(project, i + 1);
+                InlineKeyboardMarkup projectKeyboard = keyboardFactory.createProjectPreviewKeyboard(project.getId());
+
+                Integer newMessageId = sendInlineMessageReturnId(chatId, projectText, projectKeyboard);
+                newMessageIds.add(newMessageId);
+            }
+
+            // Сохраняем IDs новых сообщений для будущего удаления
+            saveProjectMessageIds(chatId, newMessageIds);
+
+            // Показываем пагинацию и фильтры
+            String paginationText = createPaginationText(chatId, state);
+            InlineKeyboardMarkup paginationKeyboard = keyboardFactory.createPaginationKeyboard(filter, chatId);
+
+            editMessage(chatId, messageId, paginationText, paginationKeyboard);
+
+        } catch (Exception e) {
+            log.error("❌ Error showing projects search: {}", e.getMessage());
+            sendErrorMessage(chatId, "Ошибка при поиске проектов");
+        }
+    }
+
+    private void showSearchFilters(Long chatId, Integer messageId, String currentFilter) {
+        String text = "⚙️ **ФИЛЬТРЫ ПОИСКА**\n\nВыберите критерии поиска:";
+        InlineKeyboardMarkup keyboard = keyboardFactory.createSearchFiltersKeyboard(currentFilter);
+        editMessage(chatId, messageId, text, keyboard);
+    }
+
+    private void applyFilter(Long chatId, Integer messageId, String filter) {
+        // Просто обновляем поиск с новым фильтром
+        showProjectsSearch(chatId, messageId, filter);
+    }
+
+    private void handlePageNavigation(Long chatId, String parameter, Integer messageId) {
+        String[] parts = parameter.split(":");
+        String direction = parts[0];
+        String filter = parts.length > 1 ? parts[1] : "";
+
+        if ("next".equals(direction)) {
+            projectSearchService.nextPage(chatId);
+        } else if ("prev".equals(direction)) {
+            projectSearchService.prevPage(chatId);
+        }
+
+        // Обновляем отображение
+        showProjectsSearch(chatId, messageId, filter);
+    }
+
+    private void saveProjectMessageIds(Long chatId, List<Integer> messageIds) {
+        userProjectMessages.put(chatId, messageIds);
+    }
+
+    private String formatProjectPreview(Project project, int number) {
+        return """
+            🎯 **Проект #%d**
+                
+            💼 *%s*
+            💰 Бюджет: *%.0f руб*
+            ⏱️ Срок: *%d дней*
+            👀 Просмотров: *%d*
+            📨 Откликов: *%d*
+                
+            📝 %s
+            """.formatted(
+                number,
+                project.getTitle(),
+                project.getBudget(),
+                project.getEstimatedDays(),
+                project.getViewsCount(),
+                project.getApplicationsCount(),
+                project.getDescription().length() > 100 ?
+                        project.getDescription().substring(0, 100) + "...":
+                        project.getDescription()
+        );
+    }
+
+    private String createPaginationText(Long chatId) {
+        int currentPage = projectSearchService.getCurrentPage(chatId);
+        int totalPages = projectSearchService.getTotalPages(chatId);
+        return "📄 **Страница %d из %d**\n\nИспользуйте кнопки ниже для навигации:".formatted(currentPage + 1, totalPages);
+    }
+
+    private Integer sendInlineMessageReturnId(Long chatId, String text, InlineKeyboardMarkup keyboard) {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        message.setText(text);
+        message.setReplyMarkup(keyboard);
+
+        try {
+            org.telegram.telegrambots.meta.api.objects.Message sentMessage = sender.execute(message);
+            return sentMessage.getMessageId();
+        } catch (TelegramApiException e) {
+            log.error("❌ Error sending message: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void deleteMessage(Long chatId, Integer messageId) {
+        if (messageId == null) return;
+
+        DeleteMessage deleteMessage = new DeleteMessage();
+        deleteMessage.setChatId(chatId.toString());
+        deleteMessage.setMessageId(messageId);
+
+        try {
+            sender.execute(deleteMessage);
+        } catch (TelegramApiException e) {
+            log.error("❌ Error deleting message: {}", e.getMessage());
+        }
+    }
+
     private void handleNavigationAction(Long chatId, String action, String parameter, Integer messageId) {
         if ("back".equals(action)) {
             String previousScreen = navigationService.popScreen(chatId);
             log.info("📱 Navigation back: {} -> {}", chatId, previousScreen);
 
             navigateToScreen(chatId, previousScreen, messageId);
+        }
+    }
+
+    private void deletePreviousProjectMessages(Long chatId) {
+        // Удаляем предыдущие сообщения с проектами
+        List<Integer> previousMessageIds = getSavedProjectMessageIds(chatId);
+
+        if (previousMessageIds!= null && !previousMessageIds.isEmpty()) {
+            log.debug("🗑️ Deleting {} project messages for user {}", previousMessageIds.size(), chatId);
+            for (Integer msgId : previousMessageIds) {
+                deleteMessage(chatId, msgId);
+            }
+
+            clearSavedProjectMessageIds(chatId);
         }
     }
 
@@ -131,7 +337,7 @@ public class CallbackHandler {
                 showUserProfile(chatId, messageId);
                 break;
             case "projects":
-                showProjectsList(chatId, messageId);
+                showProjectsSearch(chatId, messageId, "");
                 break;
             case "create_project":
                 showCreateProjectForm(chatId, messageId);
@@ -231,12 +437,6 @@ public class CallbackHandler {
             default:
                 log.warn("❌ Unknown rules action: {}", action);
         }
-    }
-
-    private void handleProjectAction(Long chatId, String action, String parameter, Integer messageId) {
-        String text = "🚧 Раздел проектов в разработке...";
-        InlineKeyboardMarkup keyboard = keyboardFactory.createMainMenuKeyboard();
-        editMessage(chatId, messageId, text, keyboard);
     }
 
     private void startRegistration(Long chatId, String userName, Integer messageId) {
