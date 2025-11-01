@@ -1,7 +1,7 @@
 package com.tcmatch.tcmatch.bot.handlers;
 
 import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
-import com.tcmatch.tcmatch.service.NavigationService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -9,8 +9,8 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class OrderHandler extends BaseHandler {
 
-    public OrderHandler(KeyboardFactory keyboardFactory, NavigationService navigationService) {
-        super(keyboardFactory, navigationService);
+    public OrderHandler(KeyboardFactory keyboardFactory, UserSessionService userSessionService) {
+        super(keyboardFactory, userSessionService);
     }
 
     @Override

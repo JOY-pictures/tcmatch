@@ -216,6 +216,21 @@ public class UserService {
         return savedUser;
     }
 
+    // 🔥 МЕТОД ДЛЯ ОБНОВЛЕНИЯ РОЛИ ПОЛЬЗОВАТЕЛЯ
+    @Transactional
+    public User updateUserRole(Long chatId, UserRole role) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setRole(role);
+        user.setRegistrationStatus(UserRole.RegistrationStatus.ROLE_SELECTED);
+
+        User savedUser = userRepository.save(user);
+        log.info("✅ Роль пользователя {} обновлена: {}", chatId, role);
+
+        return savedUser;
+    }
+
     public Optional<User> findByChatId(Long chatId) {
         return userRepository.findByChatId(chatId);
     }

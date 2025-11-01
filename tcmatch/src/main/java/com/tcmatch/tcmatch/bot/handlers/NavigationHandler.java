@@ -1,7 +1,7 @@
 package com.tcmatch.tcmatch.bot.handlers;
 
 import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
-import com.tcmatch.tcmatch.service.NavigationService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -19,10 +19,10 @@ public class NavigationHandler extends BaseHandler{
 
 
 
-    public NavigationHandler(KeyboardFactory keyboardFactory, NavigationService navigationService, MenuHandler menuHandler,
+    public NavigationHandler(KeyboardFactory keyboardFactory, UserSessionService userSessionService, MenuHandler menuHandler,
                              ProjectsHandler projectsHandler, RegistrationHandler registrationHandler, UserProfileHandler userProfileHandler,
                              FreelancersHandler freelancersHandler, ApplicationHandler applicationHandler){
-        super(keyboardFactory, navigationService);
+        super(keyboardFactory, userSessionService);
         this.menuHandler = menuHandler;
         this.projectsHandler = projectsHandler;
         this.registrationHandler = registrationHandler;
@@ -44,8 +44,23 @@ public class NavigationHandler extends BaseHandler{
     }
 
     private void handleBackNavigation(Long chatId, Integer messageId) {
-        String previousScreen = navigationService.popScreen(chatId);
+        // 🔥 ОЧИЩАЕМ ВРЕМЕННЫЕ СООБЩЕНИЯ С ПРОЕКТАМИ ПЕРЕД НАВИГАЦИЕЙ
+        if (!userSessionService.getTemporaryMessageIds(chatId).isEmpty()) {
+            deletePreviousProjectMessages(chatId);
+        }
+        String previousScreen = userSessionService.popFromNavigationHistory(chatId);
         log.info("📱 Navigation back: {} -> {}", chatId, previousScreen);
+
+        // 🔥 ЕСЛИ ИСТОРИЯ ПУСТАЯ - ВОЗВРАЩАЕМ В ГЛАВНОЕ МЕНЮ
+        if (previousScreen == null) {
+            userSessionService.putToContext(chatId, "currentScreen", "main"); // 🔥 ОБНОВЛЯЕМ КОНТЕКСТ
+            showMainMenu(chatId, messageId);
+            return;
+        }
+
+        // 🔥 ОБНОВЛЯЕМ ТЕКУЩИЙ ЭКРАН В КОНТЕКСТЕ НА ТОТ, В КОТОРЫЙ ВОЗВРАЩАЕМСЯ
+        userSessionService.putToContext(chatId, "currentScreen", previousScreen);
+        log.debug("📱 Updated current screen after back navigation: {}", previousScreen);
 
         navigateToScreen(chatId, previousScreen, messageId);
     }
@@ -62,7 +77,9 @@ public class NavigationHandler extends BaseHandler{
         String[] screenParts = screen.split(":");
         String screenType = screenParts[0];
         String screenAction = screenParts.length > 1 ? screenParts[1] : "";
-        String screenParam = screenParts.length > 2 ? screenParts[2] : null;
+        String screenParam = screen.length() > (screenType + ":" + screenAction).length()
+                ? screen.substring((screenType + ":" + screenAction + ":").length())
+                : null;
 
         log.debug("📱 Screen parsed - type: {}, action: {}, param: {}", screenType, screenAction, screenParam);
 

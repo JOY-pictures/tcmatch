@@ -47,4 +47,17 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     // 🔥 МЕТОД С ЯВНЫМ FETCH ПОЛЬЗОВАТЕЛЯ
     @Query("SELECT p FROM Project p LEFT JOIN FETCH p.customer WHERE p.id = :projectId")
     Optional<Project> findByIdWithCustomer(@Param("projectId") Long projectId);
+
+    // 🔥 НОВЫЕ МЕТОДЫ С JOIN FETCH
+    @Query("SELECT p FROM Project p " +
+            "LEFT JOIN FETCH p.customer " +
+            "LEFT JOIN FETCH p.freelancer " +
+            "WHERE p.id = :id")
+    Optional<Project> findByIdWithCustomerAndFreelancer(@Param("id") Long id);
+
+    @Query("SELECT p FROM Project p " +
+            "LEFT JOIN FETCH p.customer " +
+            "WHERE p.customer = :customer " +
+            "ORDER BY p.createdAt DESC")
+    List<Project> findByCustomerWithApplications(@Param("customer") User customer);
 }

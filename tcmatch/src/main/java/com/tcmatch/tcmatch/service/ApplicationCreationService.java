@@ -10,16 +10,29 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 public class ApplicationCreationService {
+
+    private final UserSessionService userSessionService;
+
     private final Map<Long, ApplicationCreationState> userCreationState = new ConcurrentHashMap<>();
+
+    public ApplicationCreationService(UserSessionService userSessionService) {
+        this.userSessionService = userSessionService;
+    }
 
     public void startApplicationCreation(Long chatId, Long projectId) {
         ApplicationCreationState state = new ApplicationCreationState(chatId, projectId);
-        userCreationState.put(chatId, state);
+
+        // 🔥 СОХРАНЯЕМ СОСТОЯНИЕ В USERSESSIONSERVICE
+        userSessionService.setApplicationCreationState(chatId, state);
+        userSessionService.setCurrentHandler(chatId, "application");
+        userSessionService.setCurrentAction(chatId, "application", "creating");
+
         log.info("🚀 Started application creation for user {} on project {}", chatId, projectId);
     }
 
     public ApplicationCreationState getCurrentState(Long chatId) {
-        return userCreationState.get(chatId);
+        // 🔥 ПОЛУЧАЕМ СОСТОЯНИЕ ИЗ USERSESSIONSERVICE
+        return userSessionService.getApplicationCreationState(chatId);
     }
 
     public ApplicationCreationState.ApplicationCreationStep getCurrentStep(Long chatId) {
@@ -28,11 +41,14 @@ public class ApplicationCreationService {
     }
 
     public void updateCurrentState(Long chatId, ApplicationCreationState state) {
-        userCreationState.put(chatId, state);
+        // 🔥 ОБНОВЛЯЕМ СОСТОЯНИЕ В USERSESSIONSERVICE
+        userSessionService.setApplicationCreationState(chatId, state);
     }
 
     public void cancelCreation(Long chatId) {
-        userCreationState.remove(chatId);
+        // 🔥 ОЧИЩАЕМ СОСТОЯНИЕ В USERSESSIONSERVICE
+        userSessionService.clearApplicationCreationState(chatId);
+        userSessionService.clearHandlerState(chatId, "application");
         log.info("❌ Cancelled application creation for user: {}", chatId);
     }
 
@@ -42,6 +58,9 @@ public class ApplicationCreationService {
     }
 
     public boolean isCreatingApplication(Long chatId) {
-        return userCreationState.containsKey(chatId);
+        // 🔥 ПРОВЕРЯЕМ ЧЕРЕЗ USERSESSIONSERVICE
+        String currentHandler = userSessionService.getCurrentHandler(chatId);
+        return "application".equals(currentHandler) &&
+                userSessionService.getApplicationCreationState(chatId) != null;
     }
 }

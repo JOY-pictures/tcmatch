@@ -29,7 +29,9 @@ public class Application {
     @JoinColumn(name = "freelancer_id", nullable = false)
     private User freelancer;
 
+    @Column(length = 3200)
     private String coverLetter;
+
     private Double proposedBudget; // Предложенный бюджет (может отличаться от проекта)
     private Integer proposedDays; // Предложенные сроки
 

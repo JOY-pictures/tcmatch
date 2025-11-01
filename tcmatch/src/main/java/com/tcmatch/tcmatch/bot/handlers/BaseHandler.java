@@ -1,7 +1,7 @@
 package com.tcmatch.tcmatch.bot.handlers;
 
 import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
-import com.tcmatch.tcmatch.service.NavigationService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -14,76 +14,50 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.*;
 
 @Slf4j
 @RequiredArgsConstructor
 public abstract class BaseHandler {
     protected final KeyboardFactory keyboardFactory;
-    protected final NavigationService navigationService;
+    protected final UserSessionService userSessionService;
     protected AbsSender sender;
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-
-    private final  static Map<Long, Integer> userMainMessageIds = new ConcurrentHashMap<>();
-
-    private final static Map<Long, List<Integer>> userProjectMessages = new ConcurrentHashMap<>();
 
     public void setSender(AbsSender sender) {
         this.sender = sender;
     }
 
-    // 🔥 СОХРАНИТЬ ГЛАВНЫЙ ID СООБЩЕНИЯ
+    // 🔥 ЗАМЕНЯЕМ СТАРЫЕ МЕТОДЫ НА НОВЫЕ
+
     protected void saveMainMessageId(Long chatId, Integer messageId) {
-        if (messageId != null) {
-            userMainMessageIds.put(chatId, messageId);
-            log.debug("💾 Saved main message ID for {}: {}", chatId, messageId);
-        }
+        userSessionService.setMainMessageId(chatId, messageId);
     }
 
-    // 🔥 ПОЛУЧИТЬ ГЛАВНЫЙ ID СООБЩЕНИЯ
     protected Integer getMainMessageId(Long chatId) {
-        return userMainMessageIds.get(chatId);
+        return userSessionService.getMainMessageId(chatId);
     }
 
-    // 🔥 ПОЛУЧИТЬ ГЛАВНЫЙ ID С ПОДСТРАХОВКОЙ
-    protected Integer getMainMessageIdWithFallback(Long chatId, Integer currentMessageId) {
-        Integer mainId = getMainMessageId(chatId);
-        return mainId != null ? mainId : currentMessageId;
-    }
-
-    // 🔥 ОЧИСТИТЬ ГЛАВНЫЙ ID СООБЩЕНИЯ
-    protected void clearMainMessageId(Long chatId) {
-        userMainMessageIds.remove(chatId);
-        log.debug("🗑️ Cleared main message ID for {}", chatId);
-    }
-
-    // 🔥 МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ СООБЩЕНИЯМИ ПРОЕКТОВ (из ProjectsHandler)
     protected void deletePreviousProjectMessages(Long chatId) {
-        List<Integer> previousMessageIds = userProjectMessages.getOrDefault(chatId, new ArrayList<>());
+        List<Integer> messageIds = userSessionService.getTemporaryMessageIds(chatId);
 
-        if (!previousMessageIds.isEmpty()) {
-            log.debug("🗑️ Deleting {} project messages for user {}", previousMessageIds.size(), chatId);
-            for (Integer msgId : previousMessageIds) {
+        if (!messageIds.isEmpty()) {
+            log.info("🗑️ Deleting {} temporary messages for user {}", messageIds.size(), chatId);
+            for (Integer msgId : messageIds) {
                 deleteMessage(chatId, msgId);
             }
-            userProjectMessages.remove(chatId);
         }
+
+        userSessionService.clearTemporaryMessages(chatId);
     }
 
     protected void saveProjectMessageIds(Long chatId, List<Integer> messageIds) {
-        userProjectMessages.put(chatId, messageIds);
-        log.debug("💾 Saved {} project message IDs for user: {}", messageIds.size(), chatId);
-    }
-
-    protected List<Integer> getProjectMessageIds(Long chatId) {
-        return userProjectMessages.getOrDefault(chatId, new ArrayList<>());
-    }
-
-    protected void clearProjectMessageIds(Long chatId) {
-        userProjectMessages.remove(chatId);
-        log.debug("🗑️ Cleared project message IDs for user: {}", chatId);
+        userSessionService.clearTemporaryMessages(chatId);
+        for (Integer messageId : messageIds) {
+            userSessionService.addTemporaryMessageId(chatId, messageId);
+        }
+        log.info("💾 Saved {} temporary message IDs for user: {}", messageIds.size(), chatId);
     }
 
     protected void editMessage(Long chatId, Integer messageId, String text, InlineKeyboardMarkup keyboard) {

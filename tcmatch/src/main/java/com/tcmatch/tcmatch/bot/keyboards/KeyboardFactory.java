@@ -1,6 +1,9 @@
 package com.tcmatch.tcmatch.bot.keyboards;
 
 
+import com.tcmatch.tcmatch.model.Application;
+import com.tcmatch.tcmatch.model.Project;
+import com.tcmatch.tcmatch.model.User;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.service.ProjectSearchService;
 import com.tcmatch.tcmatch.service.UserService;
@@ -125,7 +128,7 @@ public class KeyboardFactory {
                 List<InlineKeyboardButton> actionRow = new ArrayList<>();
                 actionRow.add(action.get(i));
                 if (i + 1 < action.size()) {
-                    actionRow.add(action.get(i+1));
+                    actionRow.add(action.get(i + 1));
                 }
                 rows.add(actionRow);
             }
@@ -174,6 +177,25 @@ public class KeyboardFactory {
                 break;
 
             case REGISTERED:
+                // 🔥 ДОБАВЛЯЕМ ЭТАП ВЫБОРА РОЛИ
+
+                List<InlineKeyboardButton> roleRow1 = new ArrayList<>();
+                roleRow1.add(InlineKeyboardButton.builder()
+                        .text("👨‍💻 Я Исполнитель")
+                        .callbackData("register:role:freelancer")
+                        .build());
+
+                List<InlineKeyboardButton> roleRow2 = new ArrayList<>();
+                roleRow2.add(InlineKeyboardButton.builder()
+                        .text("👔 Я Заказчик")
+                        .callbackData("register:role:customer")
+                        .build());
+
+                rows.add(roleRow1);
+                rows.add(roleRow2);
+                break;
+
+            case ROLE_SELECTED:
                 List<InlineKeyboardButton> row2 = new ArrayList<>();
                 row2.add(InlineKeyboardButton.builder()
                         .text("📜 Ознакомиться с правилами")
@@ -204,7 +226,7 @@ public class KeyboardFactory {
 
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;
-        }
+    }
 
     public InlineKeyboardMarkup createToMainMenuKeyboard() {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
@@ -290,7 +312,7 @@ public class KeyboardFactory {
                 .callbackData("projects:favorites")
                 .build());
         row1.add(InlineKeyboardButton.builder()
-                .text("📨 Откликнутные")
+                .text("📨 Отклики")
                 .callbackData("projects:applications")
                 .build());
 
@@ -301,7 +323,7 @@ public class KeyboardFactory {
                 .build());
         row2.add(InlineKeyboardButton.builder()
                 .text("🔍 Поиск проектов")
-                .callbackData("projects:search")
+                .callbackData("projects:filter")
                 .build());
 
         List<InlineKeyboardButton> row3 = new ArrayList<>();
@@ -435,7 +457,7 @@ public class KeyboardFactory {
         List<InlineKeyboardButton> row1 = new ArrayList<>();
         row1.add(InlineKeyboardButton.builder()
                 .text("⬅️ Назад в меню")
-                .callbackData("projects:show_menu")
+                .callbackData("navigation:back")
                 .build());
 
         rows.add(row1);
@@ -443,7 +465,6 @@ public class KeyboardFactory {
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;
     }
-
 
 
     public InlineKeyboardMarkup createProjectDetailsKeyboard(Long projectId, boolean fromSearch) {
@@ -470,8 +491,14 @@ public class KeyboardFactory {
                 .callbackData("projects:question:" + projectId)
                 .build());
 
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
         rows.add(row1);
         rows.add(row2);
+        rows.add(row3);
 
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;
@@ -504,8 +531,8 @@ public class KeyboardFactory {
         // 🔥 КНОПКА НАЗАД К ПОИСКУ
         List<InlineKeyboardButton> backRow = new ArrayList<>();
         backRow.add(InlineKeyboardButton.builder()
-                .text("⬅️ Назад к поиску")
-                .callbackData("projects:search")
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
                 .build());
         rows.add(backRow);
 
@@ -728,6 +755,458 @@ public class KeyboardFactory {
                 .build());
         rows.add(cancelRow);
 
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    public InlineKeyboardMarkup createRoleSelectionKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(InlineKeyboardButton.builder()
+                .text("👔 Я Заказчик")
+                .callbackData("register:role:customer")
+                .build());
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        row2.add(InlineKeyboardButton.builder()
+                .text("👨‍💻 Я Исполнитель")
+                .callbackData("register:role:freelancer")
+                .build());
+
+        rows.add(row1);
+        rows.add(row2);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 РАЗНЫЕ МЕНЮ ПРОЕКТОВ ДЛЯ РАЗНЫХ РОЛЕЙ
+    public InlineKeyboardMarkup createProjectsMenuKeyboard(Long chatId) {
+        User user = userService.findByChatId(chatId).orElseThrow();
+
+        if (user.getRole() == UserRole.CUSTOMER) {
+            return createCustomerProjectsMenuKeyboard();
+        } else {
+            return createFreelancerProjectsMenuKeyboard();
+        }
+    }
+
+    private InlineKeyboardMarkup createFreelancerProjectsMenuKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(InlineKeyboardButton.builder()
+                .text("⚙️ Выполняемые")
+                .callbackData("projects:active")
+                .build());
+        row1.add(InlineKeyboardButton.builder()
+                .text("❤️ Избранное")
+                .callbackData("projects:favorites")
+                .build());
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        row2.add(InlineKeyboardButton.builder()
+                .text("📨 Откликнутые")
+                .callbackData("projects:applications")
+                .build());
+        row2.add(InlineKeyboardButton.builder()
+                .text("🔍 Поиск проектов")
+                .callbackData("projects:filter:")
+                .build());
+
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
+
+        rows.add(row1);
+        rows.add(row2);
+        rows.add(row3);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    private InlineKeyboardMarkup createCustomerProjectsMenuKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(InlineKeyboardButton.builder()
+                .text("📋 Мои проекты")
+                .callbackData("customer_projects:menu")
+                .build());
+        row1.add(InlineKeyboardButton.builder()
+                .text("❤️ Избранное")
+                .callbackData("projects:favorites")
+                .build());
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        row2.add(InlineKeyboardButton.builder()
+                .text("🔍 Поиск проектов")
+                .callbackData("projects:search")
+                .build());
+
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
+
+        rows.add(row1);
+        rows.add(row2);
+        rows.add(row3);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КНОПКА НАЗАД К "МОИМ ПРОЕКТАМ"
+    public InlineKeyboardMarkup createBackToMyProjectsKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад к Моим проектам")
+                .callbackData("projects:my_projects")
+                .build());
+
+        rows.add(row);
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КЛАВИАТУРА СПИСКА ПРОЕКТОВ ЗАКАЗЧИКА С ПАГИНАЦИЕЙ
+    public InlineKeyboardMarkup createCustomerProjectsListKeyboard(List<Project> projects, int currentPage, int totalPages, String filter) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // 🔥 ПАГИНАЦИЯ
+        if (totalPages > 1) {
+            List<InlineKeyboardButton> paginationRow = new ArrayList<>();
+
+            if (currentPage > 0) {
+                paginationRow.add(InlineKeyboardButton.builder()
+                        .text("◀️ Пред.")
+                        .callbackData("projects:pagination:prev:my_list:" + filter)
+                        .build());
+            }
+
+            if (currentPage < totalPages - 1) {
+                paginationRow.add(InlineKeyboardButton.builder()
+                        .text("След. ▶️")
+                        .callbackData("projects:pagination:next:my_list:" + filter)
+                        .build());
+            }
+
+            rows.add(paginationRow);
+        }
+
+        // 🔥 КНОПКИ ДЛЯ ПРОЕКТОВ ТЕКУЩЕЙ СТРАНИЦЫ
+        int startIndex = currentPage * 3;
+        int endIndex = Math.min(startIndex + 3, projects.size());
+
+        for (int i = startIndex; i < endIndex; i++) {
+            Project project = projects.get(i);
+            List<InlineKeyboardButton> projectRow = new ArrayList<>();
+
+            // 🔥 КНОПКА ПРОЕКТА
+            projectRow.add(InlineKeyboardButton.builder()
+                    .text("📋 " + (i + 1))
+                    .callbackData("projects:details:" + project.getId())
+                    .build());
+
+            // 🔥 КНОПКА ОТКЛИКОВ (только для открытых проектов)
+            if (project.getStatus() == UserRole.ProjectStatus.OPEN) {
+                projectRow.add(InlineKeyboardButton.builder()
+                        .text("📨 Отклики")
+                        .callbackData("projects:applications:" + project.getId())
+                        .build());
+            }
+
+            rows.add(projectRow);
+        }
+
+        // 🔥 ОСНОВНАЯ НАВИГАЦИЯ
+        List<InlineKeyboardButton> navRow = new ArrayList<>();
+        navRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("projects:my_projects")
+                .build());
+
+        rows.add(navRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КЛАВИАТУРА ОТКЛИКОВ НА ПРОЕКТ
+    public InlineKeyboardMarkup createProjectApplicationsKeyboard(Long projectId) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // 🔥 КНОПКИ ДЕЙСТВИЙ С ОТКЛИКАМИ
+        List<InlineKeyboardButton> actionsRow = new ArrayList<>();
+        actionsRow.add(InlineKeyboardButton.builder()
+                .text("👀 Просмотреть все")
+                .callbackData("projects:view_all_applications:" + projectId)
+                .build());
+        actionsRow.add(InlineKeyboardButton.builder()
+                .text("📊 Статистика откликов")
+                .callbackData("projects:applications_stats:" + projectId)
+                .build());
+
+        // 🔥 НАВИГАЦИЯ
+        List<InlineKeyboardButton> navRow = new ArrayList<>();
+        navRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад к проекту")
+                .callbackData("projects:details:" + projectId)
+                .build());
+
+        rows.add(actionsRow);
+        rows.add(navRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КНОПКА НАЗАД К ПОИСКУ (для исполнителей)
+    public InlineKeyboardMarkup createBackToSearchKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
+
+        rows.add(row);
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КНОПКА НАЗАД К ПРОЕКТАМ (общая)
+    public InlineKeyboardMarkup createBackToProjectsKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(InlineKeyboardButton.builder()
+                .text("⬅️ В меню проектов")
+                .callbackData("projects:menu")
+                .build());
+
+        rows.add(row);
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КЛАВИАТУРА СПИСКА ОТКЛИКОВ ИСПОЛНИТЕЛЯ
+    public InlineKeyboardMarkup createApplicationsListKeyboard(List<Application> applications, int currentPage, int totalPages) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // 🔥 ПАГИНАЦИЯ
+        if (totalPages > 1) {
+            List<InlineKeyboardButton> paginationRow = new ArrayList<>();
+
+            if (currentPage > 0) {
+                paginationRow.add(InlineKeyboardButton.builder()
+                        .text("◀️ Пред.")
+                        .callbackData("projects:pagination:applications:prev")
+                        .build());
+            }
+
+            if (currentPage < totalPages - 1) {
+                paginationRow.add(InlineKeyboardButton.builder()
+                        .text("След. ▶️")
+                        .callbackData("projects:pagination:applications:next")
+                        .build());
+            }
+
+            rows.add(paginationRow);
+        }
+
+        // 🔥 КНОПКИ ДЛЯ ОТКЛИКОВ ТЕКУЩЕЙ СТРАНИЦЫ
+        int startIndex = currentPage * 5;
+        int endIndex = Math.min(startIndex + 5, applications.size());
+
+        for (int i = startIndex; i < endIndex; i++) {
+            Application app = applications.get(i);
+            List<InlineKeyboardButton> applicationRow = new ArrayList<>();
+
+            // 🔥 КНОПКА ПРОЕКТА
+            applicationRow.add(InlineKeyboardButton.builder()
+                    .text("📋 " + (i + 1))
+                    .callbackData("projects:details:" + app.getProject().getId())
+                    .build());
+
+            // 🔥 КНОПКА ОТОЗВАТЬ (только для pending)
+            if (app.getStatus() == UserRole.ApplicationStatus.PENDING) {
+                applicationRow.add(InlineKeyboardButton.builder()
+                        .text("↩️ Отозвать")
+                        .callbackData("application:withdraw:" + app.getId())
+                        .build());
+            }
+
+            rows.add(applicationRow);
+        }
+
+        // 🔥 ОСНОВНАЯ НАВИГАЦИЯ
+        List<InlineKeyboardButton> navRow = new ArrayList<>();
+        navRow.add(InlineKeyboardButton.builder()
+                .text("🔍 Найти проекты")
+                .callbackData("projects:search")
+                .build());
+        navRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("projects:menu")
+                .build());
+
+        rows.add(navRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КЛАВИАТУРА ДЛЯ КАЖДОГО ОТКЛИКА
+    public InlineKeyboardMarkup createApplicationItemKeyboard(Long applicationId, UserRole.ApplicationStatus status) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+
+        // 🔥 КНОПКА "ДЕТАЛИ ПРОЕКТА"
+        row1.add(InlineKeyboardButton.builder()
+                .text("📋 Детали отклика")
+                .callbackData("application:details:" + applicationId)
+                .build());
+
+        rows.add(row1);
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КЛАВИАТУРА УПРАВЛЕНИЯ ОТКЛИКАМИ
+    public InlineKeyboardMarkup createApplicationsControlKeyboard() {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
+
+        rows.add(row1);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    // 🔥 КЛАВИАТУРА ПАГИНАЦИИ ДЛЯ ОТКЛИКОВ
+    public InlineKeyboardMarkup createApplicationsPaginationKeyboard(int currentPage, int totalApplications) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        int pageSize = 5;
+        int totalPages = (int) Math.ceil((double) totalApplications / pageSize);
+
+        // 🔥 ПАГИНАЦИЯ
+        List<InlineKeyboardButton> paginationRow = new ArrayList<>();
+
+        if (currentPage > 0) {
+            paginationRow.add(InlineKeyboardButton.builder()
+                    .text("◀️ Предыдущая")
+                    .callbackData("projects:pagination:applications:prev")
+                    .build());
+        }
+
+        if (currentPage < totalPages - 1) {
+            paginationRow.add(InlineKeyboardButton.builder()
+                    .text("Следующая ▶️")
+                    .callbackData("projects:pagination:applications:next")
+                    .build());
+        }
+
+        if (!paginationRow.isEmpty()) {
+            rows.add(paginationRow);
+        }
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    public InlineKeyboardMarkup createApplicationDetailsKeyboard (Long applicationId, UserRole.ApplicationStatus status) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // 🔥 ОСНОВНЫЕ ДЕЙСТВИЯ
+        List<InlineKeyboardButton> actionsRow = new ArrayList<>();
+
+        // 🔥 КНОПКА "ПРОЕКТ" - ВЕРНУТЬСЯ К ПРОЕКТУ
+        actionsRow.add(InlineKeyboardButton.builder()
+                .text("📋 К проекту")
+                .callbackData("projects:details:app_" + applicationId) // Будет искать проект по applicationId
+                .build());
+
+        // 🔥 КНОПКА "ОТОЗВАТЬ" (только для pending)
+        if (status == UserRole.ApplicationStatus.PENDING) {
+            actionsRow.add(InlineKeyboardButton.builder()
+                    .text("↩️ Отозвать")
+                    .callbackData("application:confirm_withdraw:" + applicationId)
+                    .build());
+        }
+
+        rows.add(actionsRow);
+
+        // 🔥 ДОПОЛНИТЕЛЬНЫЕ ДЕЙСТВИЯ
+        List<InlineKeyboardButton> additionalRow = new ArrayList<>();
+        additionalRow.add(InlineKeyboardButton.builder()
+                .text("👔 Профиль заказчика")
+                .callbackData("projects:customer_from_application:" + applicationId)
+                .build());
+
+        rows.add(additionalRow);
+
+        // 🔥 НАВИГАЦИЯ
+        List<InlineKeyboardButton> navRow = new ArrayList<>();
+        navRow.add(InlineKeyboardButton.builder()
+                .text("⬅️ Назад")
+                .callbackData("navigation:back")
+                .build());
+
+        rows.add(navRow);
+
+        inlineKeyboard.setKeyboard(rows);
+        return inlineKeyboard;
+    }
+
+    public InlineKeyboardMarkup createWithdrawConfirmationKeyboard(Long applicationId) {
+        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // 🔥 КНОПКИ ПОДТВЕРЖДЕНИЯ
+        List<InlineKeyboardButton> confirmRow1 = new ArrayList<>();
+        confirmRow1.add(InlineKeyboardButton.builder()
+                .text("✅ Да, отозвать")
+                .callbackData("application:withdraw:" + applicationId)
+                .build());
+
+        List<InlineKeyboardButton> confirmRow2 = new ArrayList<>();
+        confirmRow2.add(InlineKeyboardButton.builder()
+                .text("❌ Нет, оставить")
+                .callbackData("navigation:back")
+                .build());
+
+        rows.add(confirmRow1);
+        rows.add(confirmRow2);
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;
     }

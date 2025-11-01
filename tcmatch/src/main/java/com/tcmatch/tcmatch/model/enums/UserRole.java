@@ -45,7 +45,7 @@ public enum UserRole {
         NOT_REGISTERED,     // Пользователь только написал /start
         REGISTERED,         // Создан аккаунт (/register), но правила не видел
         RULES_VIEWED,       // Просмотрел правила (/rules), но не принял
-        RULES_ACCEPTED      // Принял правила (/accept_rules) - полный доступ
+        ROLE_SELECTED, RULES_ACCEPTED      // Принял правила (/accept_rules) - полный доступ
     }
 
     public enum UserStatus {

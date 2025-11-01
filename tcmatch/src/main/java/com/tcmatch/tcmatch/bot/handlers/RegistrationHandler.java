@@ -4,20 +4,22 @@ import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
 import com.tcmatch.tcmatch.model.User;
 import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
-import com.tcmatch.tcmatch.service.NavigationService;
 import com.tcmatch.tcmatch.service.TextMessageService;
 import com.tcmatch.tcmatch.service.UserService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+
+import java.util.List;
 
 @Component
 @Slf4j
 public class RegistrationHandler extends BaseHandler {
     private final UserService userService;
 
-    public RegistrationHandler(KeyboardFactory keyboardFactory, NavigationService navigationService, UserService userService) {
-        super(keyboardFactory, navigationService);
+    public RegistrationHandler(KeyboardFactory keyboardFactory, UserSessionService userSessionService, UserService userService) {
+        super(keyboardFactory, userSessionService);
         this.userService = userService;
     }
 
@@ -46,6 +48,9 @@ public class RegistrationHandler extends BaseHandler {
             case "accept":
                 acceptRules(userDto);
                 break;
+            case "role":
+                handleRoleSelection(userDto, parameter);
+                break;
             default:
                 log.warn("❌ Unknown registration action: {}", action);
         }
@@ -69,18 +74,61 @@ public class RegistrationHandler extends BaseHandler {
                 userDto.getFirstName(),
                 userDto.getLastName()
         );
-        String text = """
-            🚀 РЕГИСТРАЦИЯ НАЧАТА!
-            
-            Уважаемый пользователь, %s!
-            
-            📋Прежде чем начать использование нашей платформы, пожалуйста, ознакомьтесь внимательно с правилами пользования услугами.
-            Вы можете сделать это прямо сейчас, нажав на кнопку ниже:
-            """.formatted(userDto.getDisplayName());
+
+        showRoleSelection(userDto);
+
+        // 🔥 ПОКАЗЫВАЕМ ВЫБОР РОЛИ
+        String roleSelectionText = """
+        🎯 **ВЫБЕРИТЕ ВАШУ РОЛЬ**
+        
+        Как вы планируете использовать платформу?
+        
+        👔 **ЗАКАЗЧИК** - размещаю проекты, ищу исполнителей
+        👨‍💻 **ИСПОЛНИТЕЛЬ** - ищу проекты, выполняю заказы
+        
+        💡 Вы сможете изменить роль позже в настройках
+        """;
 
         InlineKeyboardMarkup keyboard = keyboardFactory.createRegistrationInProgressKeyboard(UserRole.RegistrationStatus.REGISTERED);
-        editMessage(userDto.getChatId(), userDto.getMessageId(), text, keyboard);
+        editMessage(userDto.getChatId(), userDto.getMessageId(), roleSelectionText, keyboard);
         log.info("🚀 Registration started via callback for: {}", userDto.getChatId());
+    }
+
+    private void showRoleSelection(UserDto userDto) {
+        String text = """
+        🎯 **ВЫБЕРИТЕ ВАШУ РОЛЬ**
+        
+        Как вы планируете использовать платформу?
+        
+        👔 **ЗАКАЗЧИК** - размещаю проекты, ищу исполнителей
+        👨‍💻 **ИСПОЛНИТЕЛЬ** - ищу проекты, выполняю заказы
+        
+        💡 Вы сможете изменить роль позже в настройках
+        """;
+
+        InlineKeyboardMarkup keyboard = keyboardFactory.createRoleSelectionKeyboard();
+        editMessage(userDto.getChatId(), userDto.getMessageId(), text, keyboard);
+    }
+
+
+    // 🔥 ОБРАБОТКА ВЫБОРА РОЛИ
+    private void handleRoleSelection(UserDto userDto, String role) {
+        UserRole userRole = "customer".equals(role) ? UserRole.CUSTOMER : UserRole.FREELANCER;
+
+        User user = userService.updateUserRole(userDto.getChatId(), userRole);
+
+        String text = """
+        ✅ **РОЛЬ ВЫБРАНА**
+            %s**
+        
+        Уважаемый пользователь,
+        
+        📋Прежде чем начать использование нашей платформы, пожалуйста, ознакомьтесь внимательно с правилами пользования услугами.
+        Вы можете сделать это прямо сейчас, нажав на кнопку ниже:
+        """.formatted(getRoleDisplay(userRole));
+
+        InlineKeyboardMarkup keyboard = keyboardFactory.createRegistrationInProgressKeyboard(UserRole.RegistrationStatus.ROLE_SELECTED);
+        editMessage(userDto.getChatId(), userDto.getMessageId(), text, keyboard);
     }
 
     private void showFullRules(UserDto userDto) {
@@ -97,8 +145,9 @@ public class RegistrationHandler extends BaseHandler {
     private void acceptRules(UserDto userDto) {
         User user = userService.acceptRules(userDto.getChatId());
 
-        navigationService.removeScreenOfType(userDto.getChatId(), "rules");
-        navigationService.removeScreenOfType(userDto.getChatId(), "register");
+        // 🔥 ИЛИ УДАЛЯЕМ ВСЕ ЭКРАНЫ РЕГИСТРАЦИИ И ПРАВИЛ
+        userSessionService.removeScreensOfType(userDto.getChatId(), "rules");
+        userSessionService.removeScreensOfType(userDto.getChatId(), "register");
 
         String successText = """
                 🎉 РЕГИСТРАЦИЯ ЗАВЕРШЕНА!
@@ -112,8 +161,10 @@ public class RegistrationHandler extends BaseHandler {
 
         editMessage(userDto.getChatId(), userDto.getMessageId(), successText, keyboardFactory.createToMainMenuKeyboard());
 
-        // Сбрасываем навигацию на главное меню
-        navigationService.resetToMain(userDto.getChatId());
+        // 🔥 НОВАЯ ЛОГИКА - сбрасываем навигацию на главное меню
+        userSessionService.pushToNavigationHistory(userDto.getChatId(), "main");
+        userSessionService.setCurrentHandler(userDto.getChatId(), "menu");
+        userSessionService.setCurrentAction(userDto.getChatId(), "menu", "main");
         log.info("🎉 User completed registration via callback: {}", userDto.getChatId());
     }
 
@@ -137,4 +188,12 @@ public class RegistrationHandler extends BaseHandler {
     }
 
 
+    private String getRoleDisplay(UserRole role) {
+        return switch (role) {
+            case FREELANCER -> "👨‍💻 Исполнитель";
+            case CUSTOMER -> "👔 Заказчик";
+            case ADMIN -> "⚡ Администратор";
+            default -> "👤 Пользователь";
+        };
+    }
 }

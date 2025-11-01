@@ -2,7 +2,7 @@ package com.tcmatch.tcmatch.bot.handlers;
 
 import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
 import com.tcmatch.tcmatch.model.dto.BaseHandlerData;
-import com.tcmatch.tcmatch.service.NavigationService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -10,8 +10,8 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMa
 @Component
 @Slf4j
 public class FreelancersHandler extends BaseHandler {
-    public FreelancersHandler(KeyboardFactory keyboardFactory, NavigationService navigationService) {
-        super(keyboardFactory, navigationService);
+    public FreelancersHandler(KeyboardFactory keyboardFactory, UserSessionService userSessionService) {
+        super(keyboardFactory, userSessionService);
     }
 
     @Override

@@ -112,8 +112,11 @@ public class ProjectService {
     }
 
     public List<Project> getUserProjects(Long chatId) {
-        User user = userService.findByChatId(chatId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-        return projectRepository.findByCustomerOrderByCreatedAtDesc(user);
+        User user = userService.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        // 🔥 ИСПОЛЬЗУЕМ МЕТОД С JOIN FETCH
+        return projectRepository.findByCustomerWithApplications(user);
     }
 
     public List<Project> getFreelancerProjects(Long chatId) {
@@ -121,13 +124,9 @@ public class ProjectService {
     }
 
     public Optional<Project> getProjectById(Long projectId) {
-        // 🔥 СНАЧАЛА ПОЛУЧАЕМ ПРОЕКТ
-        Optional<Project> project = projectRepository.findByIdWithCustomer(projectId);
+        // 🔥 ИСПОЛЬЗУЕМ МЕТОД С JOIN FETCH
+        Optional<Project> project = projectRepository.findByIdWithCustomerAndFreelancer(projectId);
 
-        // 🔥 ПОТОМ ОТДЕЛЬНО ИНКРЕМЕНТИРУЕМ ПРОСМОТРЫ
-        project.ifPresent(p -> {
-            incrementViewsCountInNewTransaction(projectId);
-        });
         return project;
     }
 
@@ -200,4 +199,19 @@ public class ProjectService {
         return projectRepository.save(project);
     }
 
+    // 🔥 МЕТОД ДЛЯ УВЕЛИЧЕНИЯ ПРОСМОТРОВ (ВЫЗЫВАЕТСЯ ТОЛЬКО ЧЕРЕЗ ProjectViewService)
+    @Transactional
+    public void incrementProjectViews(Long projectId) {
+        try {
+            Optional<Project> projectOpt = projectRepository.findById(projectId);
+            if (projectOpt.isPresent()) {
+                Project project = projectOpt.get();
+                project.setViewsCount(project.getViewsCount() + 1);
+                projectRepository.save(project);
+                log.debug("✅ Увеличено кол-во просмотров проекта {}: {}", projectId, project.getViewsCount());
+            }
+        } catch (Exception e) {
+            log.error("❌ Ошибка инкремента просмотров: {}", e.getMessage());
+        }
+    }
 }

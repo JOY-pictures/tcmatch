@@ -4,12 +4,11 @@ import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
 import com.tcmatch.tcmatch.model.dto.BaseHandlerData;
 import com.tcmatch.tcmatch.model.dto.ProjectData;
 import com.tcmatch.tcmatch.model.dto.UserProfileData;
-import com.tcmatch.tcmatch.service.NavigationService;
 import com.tcmatch.tcmatch.service.ProjectSearchService;
 import com.tcmatch.tcmatch.service.UserService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 
 @Component
 @Slf4j
@@ -21,10 +20,10 @@ public class MenuHandler extends BaseHandler{
     private final HelpHandler helpHandler;
     private final FreelancersHandler freelancersHandler;
 
-    public MenuHandler(KeyboardFactory keyboardFactory, NavigationService navigationService,
+    public MenuHandler(KeyboardFactory keyboardFactory, UserSessionService userSessionService,
                        UserService userService, ProjectSearchService projectSearchService, UserProfileHandler userProfileHandler,
                         ProjectsHandler projectsHandler, HelpHandler helpHandler, FreelancersHandler freelancersHandler) {
-        super(keyboardFactory, navigationService);
+        super(keyboardFactory, userSessionService);
         this.userService = userService;
         this.projectSearchService = projectSearchService;
         this.userProfileHandler = userProfileHandler;

@@ -5,26 +5,29 @@ import com.tcmatch.tcmatch.model.Application;
 import com.tcmatch.tcmatch.model.Project;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
 import com.tcmatch.tcmatch.model.dto.ProjectData;
-import com.tcmatch.tcmatch.service.ApplicationCreationService;
-import com.tcmatch.tcmatch.service.ApplicationService;
-import com.tcmatch.tcmatch.service.NavigationService;
-import com.tcmatch.tcmatch.service.ProjectService;
+import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
+import com.tcmatch.tcmatch.model.enums.UserRole;
+import com.tcmatch.tcmatch.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Component
 @Slf4j
 public class ApplicationHandler extends BaseHandler {
 
+    private final SubscriptionService subscriptionService;
     private final ApplicationService applicationService;
     private final ProjectService projectService;
     private final ApplicationCreationService applicationCreationService;
-
-    public ApplicationHandler(KeyboardFactory keyboardFactory, NavigationService navigationService,
+    public ApplicationHandler(KeyboardFactory keyboardFactory, SubscriptionService subscriptionService,
                               ApplicationService applicationService, ProjectService projectService,
-                              ApplicationCreationService applicationCreationService) {
-        super(keyboardFactory, navigationService);
+                              UserSessionService userSessionService, ApplicationCreationService applicationCreationService) {
+        super(keyboardFactory, userSessionService);
+        this.subscriptionService = subscriptionService;
         this.applicationService = applicationService;
         this.projectService = projectService;
         this.applicationCreationService = applicationCreationService;
@@ -58,6 +61,11 @@ public class ApplicationHandler extends BaseHandler {
             case "withdraw":
                 withdrawApplication(data, parameter);
                 break;
+            case "confirm_withdraw": // 🔥 НОВЫЙ CASE - ПОДТВЕРЖДЕНИЕ ОТЗЫВА
+                confirmWithdrawApplication(data, parameter);
+                break;
+            case "details":
+                showApplicationDetails(data, parameter);
             default:
                 log.warn("❌ Unknown application action: {}", action);
         }
@@ -90,12 +98,13 @@ public class ApplicationHandler extends BaseHandler {
                 return;
             }
 
+            // 🔥 ИСПОЛЬЗУЕМ ApplicationCreationService (который внутри использует UserSessionService)
             applicationCreationService.startApplicationCreation(data.getChatId(), projectId);
             showCurrentStep(data, project);
 
         } catch (Exception e) {
             log.error("❌ Ошибка начала создания отклика: {}", e.getMessage());
-            sendErrorMessage(data.getChatId(), "Ошибка начала создания отклика: " + e.getMessage());
+            sendTemporaryErrorMessage(data.getChatId(), "Ошибка начала создания отклика: " + e.getMessage(), 5);
         }
     }
 
@@ -297,13 +306,13 @@ public class ApplicationHandler extends BaseHandler {
     }
 
 
-    // 🔥 ОБНОВЛЯЕМ ОБРАБОТКУ ТЕКСТОВЫХ СООБЩЕНИЙ
     public void handleTextMessage(Long chatId, String text) {
         if (!applicationCreationService.isCreatingApplication(chatId)) {
             return;
         }
 
         ApplicationCreationState state = applicationCreationService.getCurrentState(chatId);
+
         if (state == null) return;
 
         try {
@@ -325,13 +334,12 @@ public class ApplicationHandler extends BaseHandler {
 
             applicationCreationService.updateCurrentState(chatId, state);
 
-            // 🔥 ЕСЛИ РЕЖИМ РЕДАКТИРОВАНИЯ - ВОЗВРАЩАЕМСЯ НА ПОДТВЕРЖДЕНИЕ
             if (state.isEditing()) {
                 state.finishEditing();
                 applicationCreationService.updateCurrentState(chatId, state);
             } else {
-                // 🔥 ЕСЛИ ОБЫЧНЫЙ ПРОЦЕСС - ПЕРЕХОДИМ К СЛЕДУЮЩЕМУ ШАГУ
                 state.moveToNextStep();
+                applicationCreationService.updateCurrentState(chatId, state);
             }
 
             Project project = projectService.getProjectById(state.getProjectId())
@@ -399,28 +407,21 @@ public class ApplicationHandler extends BaseHandler {
                 return;
             }
 
-            // 🔥 ПРОВЕРКА ПОДПИСКИ И ЛИМИТОВ (здесь будет логика проверки)
-            boolean hasSubscription = true; // временно
-            int remainingApplications = 5; // временно
+            // 🔥 РЕАЛЬНАЯ ПРОВЕРКА ПОДПИСКИ И ЛИМИТОВ
+            SubscriptionService.SubscriptionCheckResult subscriptionCheck =
+                    subscriptionService.checkApplicationLimits(data.getChatId());
 
-            if (!hasSubscription && remainingApplications <= 0) {
-                String warningText = """
-                        ⚠️ **ЛИМИТ ОТКЛИКОВ ИСЧЕРПАН**
-                        
-                        У вас закончились бесплатные отклики
-                        
-                        💎 *Что делать:*
-                        • Приобрести подписку TCMatch Pro
-                        • Дождаться обновления лимита
-                        • Использовать отклики экономнее
-                        
-                        🛒 *Подписка открывает:*
-                        • Неограниченные отклики
-                        • Приоритет в поиске
-                        • Расширенную статистику
-                        """;
+            if (!subscriptionCheck.canApply) {
+                String warningText = createSubscriptionWarningText(subscriptionCheck);
                 editMessage(data.getChatId(), data.getMessageId(), warningText,
                         keyboardFactory.createSubscriptionKeyboard());
+                return;
+            }
+
+            // 🔥 ИСПОЛЬЗУЕМ ОТКЛИК (уменьшаем лимит)
+            boolean applicationUsed = subscriptionService.useApplication(data.getChatId());
+            if (!applicationUsed) {
+                sendTemporaryErrorMessage(data.getChatId(), "❌ Не удалось использовать отклик", 5);
                 return;
             }
 
@@ -435,27 +436,30 @@ public class ApplicationHandler extends BaseHandler {
 
             applicationCreationService.completeCreation(data.getChatId());
 
+            // 🔥 ОБНОВЛЯЕМ СТАТИСТИКУ ДЛЯ СООБЩЕНИЯ УСПЕХА
+            SubscriptionService.SubscriptionCheckResult updatedStats =
+                    subscriptionService.checkApplicationLimits(data.getChatId());
+
             String successText = """
                     <b>✅ ОТКЛИК ОТПРАВЛЕН!</b>
-        
-        <blockquote><b>💼 Проект:</b> %s
-        <b>💰 Ваш бюджет:</b> <code>%.0f руб</code>  
-        <b>⏱️ Ваш срок:</b> <code>%d дней</code>
-        
-        <b>📨 Статус:</b> отправлен заказчику
-        <b>⏳ Ожидание:</b> ответа от заказчика </blockquote>
-        
-        <b>💡 Что дальше:</b>
-        • Заказчик рассмотрит ваш отклик
-        • Вы получите уведомление о решении
-        • Можете отозвать отклик в любое время
-        
-        <b>📊 Осталось откликов:</b> <code>%d</code>
-        """.formatted(
+
+    <blockquote><b>💼 Проект:</b> %s
+    <b>💰 Ваш бюджет:</b> <code>%.0f руб</code>  
+    <b>⏱️ Ваш срок:</b> <code>%d дней</code>
+
+    <b>📨 Статус:</b> отправлен заказчику
+    <b>⏳ Ожидание:</b> ответа от заказчика </blockquote>
+
+    <b>📊 Осталось откликов в этом месяце:</b> <code>%d/%d</code>
+
+    <i>💡 Лимит обновится %s</i>
+    """.formatted(
                     escapeHtml(application.getProject().getTitle()),
                     application.getProposedBudget(),
                     application.getProposedDays(),
-                    remainingApplications
+                    updatedStats.remainingApplications,
+                    updatedStats.currentPlan.getMonthlyApplicationsLimit(),
+                    formatNextResetDate()
             );
 
             Integer mainMessageId = getMainMessageId(data.getChatId());
@@ -469,7 +473,49 @@ public class ApplicationHandler extends BaseHandler {
         }
     }
 
+    // 🔥 ТЕКСТ ПРЕДУПРЕЖДЕНИЯ О ЛИМИТАХ
+    private String createSubscriptionWarningText(SubscriptionService.SubscriptionCheckResult check) {
+        return """
+        ⚠️ **ЛИМИТ ОТКЛИКОВ ИСЧЕРПАН**
+        
+        📊 Ваш текущий тариф: *%s*
+        🚫 Использовано откликов: *%d/%d*
+        
+        💎 *Что делать:*
+        • Приобрести подписку TCMatch Pro
+        • Дождаться обновления лимита (1 числа)
+        • Использовать отклики экономнее
+        
+        🛒 *Доступные тарифы:*
+        • %s - %s
+        • %s - %s  
+        • %s - %s
+        
+        💡 *Подписка открывает:*
+        • Больше откликов в месяц
+        • Приоритет в поиске
+        • Расширенную статистику
+        """.formatted(
+                check.currentPlan.getDisplayName(),
+                check.currentPlan.getMonthlyApplicationsLimit() - check.remainingApplications,
+                check.currentPlan.getMonthlyApplicationsLimit(),
+                SubscriptionPlan.BASIC.getDisplayName(),
+                SubscriptionPlan.BASIC.getPriceDisplay(),
+                SubscriptionPlan.PRO.getDisplayName(),
+                SubscriptionPlan.PRO.getPriceDisplay(),
+                SubscriptionPlan.UNLIMITED.getDisplayName(),
+                SubscriptionPlan.UNLIMITED.getPriceDisplay()
+        );
+    }
+
+    // 🔥 ФОРМАТИРОВАНИЕ ДАТЫ ОБНОВЛЕНИЯ ЛИМИТОВ
+    private String formatNextResetDate() {
+        LocalDateTime nextMonth = LocalDateTime.now().plusMonths(1).withDayOfMonth(1).withHour(0).withMinute(0);
+        return nextMonth.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+    }
+
     private void cancelApplicationCreation(ProjectData data) {
+
         applicationCreationService.cancelCreation(data.getChatId());
 
         String text = """
@@ -480,11 +526,7 @@ public class ApplicationHandler extends BaseHandler {
 
         Integer mainMessageId = getMainMessageId(data.getChatId());
 
-        // 🔥 ПОКАЗЫВАЕМ ГЛАВНЫЙ ЭКРАН ВМЕСТО ПРОСТО КНОПКИ "НАЗАД"
         editMessage(data.getChatId(), mainMessageId, text, keyboardFactory.createToMainMenuKeyboard());
-
-        // 🔥 СБРАСЫВАЕМ НАВИГАЦИЮ НА ГЛАВНЫЙ ЭКРАН
-        navigationService.resetToMain(data.getChatId());
 
         log.info("❌ Пользователь {} отменил создание отклика", data.getChatId());
     }
@@ -501,17 +543,182 @@ public class ApplicationHandler extends BaseHandler {
                 📨 Заявка успешно отозвана
                 👔 Заказчик уведомлен
                 
-                💡 Вы можете откликнуться на этот проект 
-                снова, если передумаете
+                📊 *Ваш отклик был удален из системы*
                 """;
 
-            editMessage(data.getChatId(), data.getMessageId(), successText, keyboardFactory.createBackButton());
-            log.info("✅ Пользователь {} отозвал отклик {}", data.getChatId(), applicationId);
+            InlineKeyboardMarkup keyboard = keyboardFactory.createToMainMenuKeyboard();
 
+
+
+            Integer mainMessageId = getMainMessageId(data.getChatId());
+            if (mainMessageId != null) {
+                editMessage(data.getChatId(), mainMessageId, successText, keyboard);
+            } else {
+                Integer newMessageId = sendInlineMessageReturnId(data.getChatId(), successText, keyboard);
+                saveMainMessageId(data.getChatId(), newMessageId);
+            }
+
+            log.info("✅ Пользователь {} отозвал отклик {}", data.getChatId(), applicationId);
         } catch (Exception e) {
             log.error("❌ Ошибка отзыва отклика: {}", e.getMessage());
             sendTemporaryErrorMessage(data.getChatId(), "Ошибка отзыва отклика: " + e.getMessage(), 5);
         }
+    }
+
+    private void confirmWithdrawApplication(ProjectData data, String applicationIdParam) {
+        try {
+            Long applicationId = Long.parseLong(applicationIdParam);
+            Application application = applicationService.getApplicationById(applicationId)
+                    .orElseThrow(() -> new RuntimeException("Отклик не найден"));
+
+            // 🔥 ПРОВЕРЯЕМ, ЧТО ПОЛЬЗОВАТЕЛЬ - ВЛАДЕЛЕЦ ОТКЛИКА
+            if (!application.getFreelancer().getChatId().equals(data.getChatId())) {
+                sendTemporaryErrorMessage(data.getChatId(), "❌ У вас нет доступа к этому отклику", 5);
+                return;
+            }
+
+            // 🔥 ПРОВЕРЯЕМ, ЧТО ОТКЛИК МОЖНО ОТОЗВАТЬ
+            if (application.getStatus() != UserRole.ApplicationStatus.PENDING) {
+                sendTemporaryErrorMessage(data.getChatId(),
+                        "❌ Нельзя отозвать отклик со статусом: " + getApplicationStatusDisplay(application.getStatus()), 5);
+                return;
+            }
+
+            String warningText = """
+            <b>⚠️ **ПОДТВЕРЖДЕНИЕ ОТЗЫВА ОТКЛИКА**</b>
+            
+            <blockquote>📋 *Проект:* %s
+            💰 *Ваш бюджет:* %.0f руб
+            ⏱️ *Ваш срок:* %d дней
+            📅 *Отправлен:* %s</blockquote>
+            
+            🔴<b> *Внимание! </b>После отзыва:*
+            <i>• Отклик будет удален из системы
+            • Заказчик больше не увидит ваш отклик
+            • Вернуть отклик будет невозможно
+            • Использованный отклик не вернется в лимит</i>
+            
+            ❓ <b>*Вы точно хотите отозвать этот отклик?*</b>
+            """.formatted(
+                    application.getProject().getTitle(),
+                    application.getProposedBudget(),
+                    application.getProposedDays(),
+                    application.getAppliedAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+            );
+            InlineKeyboardMarkup keyboard = keyboardFactory.createWithdrawConfirmationKeyboard(applicationId);
+
+            Integer mainMessageId = getMainMessageId(data.getChatId());
+            if (mainMessageId != null) {
+                editMessageWithHtml(data.getChatId(), mainMessageId, warningText, keyboard);
+            } else {
+                Integer newMessageId = sendInlineMessageReturnId(data.getChatId(), warningText, keyboard);
+                saveMainMessageId(data.getChatId(), newMessageId);
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Ошибка подтверждения отзыва отклика: {}", e.getMessage());
+            sendTemporaryErrorMessage(data.getChatId(), "Ошибка подтверждения отзыва", 5);
+        }
+    }
+
+    // 🔥 МЕТОД ДЛЯ ПОКАЗА ДЕТАЛЕЙ ОТКЛИКА
+    private void showApplicationDetails(ProjectData data, String applicationIdParam) {
+        try {
+            Long applicationId = Long.parseLong(applicationIdParam);
+            Application application = applicationService.getApplicationById(applicationId)
+                    .orElseThrow(() -> new RuntimeException("Отклик не найден"));
+
+            // 🔥 ПРОВЕРЯЕМ, ЧТО ПОЛЬЗОВАТЕЛЬ - ВЛАДЕЛЕЦ ОТКЛИКА
+            if (!application.getFreelancer().getChatId().equals(data.getChatId())) {
+                sendTemporaryErrorMessage(data.getChatId(), "❌ У вас нет доступа к этому отклику", 5);
+                return;
+            }
+
+            // 🔥 УДАЛЯЕМ ПРЕДЫДУЩИЕ СООБЩЕНИЯ
+            deletePreviousProjectMessages(data.getChatId());
+
+            String applicationText = formatApplicationDetails(application);
+            InlineKeyboardMarkup keyboard = keyboardFactory.createApplicationDetailsKeyboard(
+                    application.getId(),
+                    application.getStatus()
+            );
+
+            // 🔥 СОХРАНЯЕМ MESSAGE_ID ЕСЛИ ЕЩЁ НЕТ
+            if (getMainMessageId(data.getChatId()) == null) {
+                saveMainMessageId(data.getChatId(), data.getMessageId());
+            }
+
+            Integer mainMessageId = getMainMessageId(data.getChatId());
+
+            if (mainMessageId != null) {
+                editMessageWithHtml(data.getChatId(), mainMessageId, applicationText, keyboard);
+            } else {
+                Integer newMessageId = sendHtmlMessageReturnId(data.getChatId(), applicationText, keyboard);
+                saveMainMessageId(data.getChatId(), newMessageId);
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Ошибка показа деталей отклика: {}", e.getMessage());
+            sendTemporaryErrorMessage(data.getChatId(), "Ошибка загрузки информации об отклике", 5);
+        }
+    }
+
+    // 🔥 ФОРМАТИРОВАНИЕ ДЕТАЛЕЙ ОТКЛИКА
+    private String formatApplicationDetails(Application application) {
+        Project project = application.getProject();
+
+        return """
+        <b>📋 **ДЕТАЛИ ВАШЕГО ОТКЛИКА**</b>
+        
+        <blockquote><b>💼 *Проект:* %s</b>
+        <b>👔 *Заказчик:* @%s</b>
+        <b>⭐ *Рейтинг заказчика:* %.1f/5.0</b>
+        
+        <b>💰 *Ваше предложение по бюджету:* %.0f руб</b>
+        <b>💵 *Бюджет проекта:* %.0f руб</b>
+        
+        <b>⏱️ *Ваш срок выполнения:* %d дней</b>
+        <b>📅 *Срок проекта:* %d дней</b>
+        
+        <b>📅 *Отклик отправлен:* %s</b>
+        <b>📊 *Статус:* %s</b>
+        <b>%s</b>
+        <b>📝 *Ваше сопроводительное письмо:*</b>
+        <i>%s</i>
+        
+        <b>🛠️ *Требуемые навыки:*</b>
+        <u>%s</u></blockquote>
+        """.formatted(
+                project.getTitle(),
+                project.getCustomer().getUsername() != null ? project.getCustomer().getUsername() : "скрыт",
+                project.getCustomer().getProfessionalRating(),
+                application.getProposedBudget(),
+                project.getBudget(),
+                application.getProposedDays(),
+                project.getEstimatedDays(),
+                application.getAppliedAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")),
+                getApplicationStatusDisplay(application.getStatus()),
+                getApplicationStatusDetails(application),
+                application.getCoverLetter(),
+                project.getRequiredSkills() != null ? project.getRequiredSkills() : "не указаны"
+        );
+    }
+
+    private String getApplicationStatusDisplay(UserRole.ApplicationStatus applicationStatus) {
+        return switch (applicationStatus) {
+            case PENDING -> "Ожидает рассмотрения";
+            case ACCEPTED -> "Принят заказчиком";
+            case REJECTED -> "Отклонен заказчиком";
+            case WITHDRAWN -> "Отозван исполнителем";
+        };
+    }
+
+    // 🔥 ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ О СТАТУСЕ
+    private String getApplicationStatusDetails(Application application) {
+        if (application.getReviewedAt() != null && application.getCustomerComment() != null) {
+            return "💬 *Комментарий заказчика:* " + application.getCustomerComment() + "\n";
+        }
+        return "";
     }
 
     // 🔥 ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ ЭКРАНИРОВАНИЯ HTML

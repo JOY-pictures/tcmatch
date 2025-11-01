@@ -4,8 +4,8 @@ import com.tcmatch.tcmatch.bot.keyboards.KeyboardFactory;
 import com.tcmatch.tcmatch.model.User;
 import com.tcmatch.tcmatch.model.dto.UserProfileData;
 import com.tcmatch.tcmatch.model.enums.UserRole;
-import com.tcmatch.tcmatch.service.NavigationService;
 import com.tcmatch.tcmatch.service.UserService;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -18,8 +18,8 @@ import java.util.Map;
 public class UserProfileHandler extends BaseHandler {
     private final UserService userService;
 
-    public UserProfileHandler(KeyboardFactory keyboardFactory, NavigationService navigationService, UserService userService) {
-        super(keyboardFactory, navigationService);
+    public UserProfileHandler(KeyboardFactory keyboardFactory, UserSessionService userSessionService, UserService userService) {
+        super(keyboardFactory, userSessionService);
         this.userService = userService;
     }
 

@@ -66,7 +66,7 @@ public class ApplicationService {
 
     public List<Application> getUserApplications(Long chatId) {
         User user = userService.findByChatId(chatId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-        return applicationRepository.findByFreelancerOrderByAppliedAtDesc(user);
+        return applicationRepository.findByFreelancerWithProjectAndCustomer(user);
     }
 
     public Application acceptApplication(Long applicationId, Long customerChatId) {
@@ -110,13 +110,28 @@ public class ApplicationService {
     }
 
     public void withdrawApplication(Long applicationId, Long freelancerChatId) {
-        Application application = applicationRepository.findById(applicationId).orElseThrow(() -> new RuntimeException("Отклик не найден"));
+        Application application = applicationRepository.findByIdWithProjectAndFreelancer(applicationId).orElseThrow(() -> new RuntimeException("Отклик не найден"));
 
         if (!application.getFreelancer().getChatId().equals(freelancerChatId)) {
             throw new RuntimeException("Только автор может отзывать отклик");
         }
 
+        // 🔥 ПРОВЕРЯЕМ, ЧТО ОТКЛИК МОЖНО ОТОЗВАТЬ
+        if (application.getStatus() != UserRole.ApplicationStatus.PENDING) {
+            throw new RuntimeException("Нельзя отозвать отклик со статусом: " + application.getStatus());
+        }
+
+        // 🔥 ОБНОВЛЯЕМ СТАТУС ОТКЛИКА
         application.setStatus(UserRole.ApplicationStatus.WITHDRAWN);
+        application.setReviewedAt(LocalDateTime.now());
+
+        applicationRepository.save(application);
+
+        // 🔥 УМЕНЬШАЕМ СЧЕТЧИК ОТКЛИКОВ ПРОЕКТА
+        Project project = application.getProject();
+        project.setApplicationsCount(Math.max(0, project.getApplicationsCount() - 1));
+        projectService.updateProject(project);
+
         log.info("✅ Пользователь {} отозвал отклик {}", applicationId, freelancerChatId);
     }
 
@@ -139,6 +154,14 @@ public class ApplicationService {
     }
 
     public Optional<Application> getApplicationById(Long applicationId) {
-        return applicationRepository.findById(applicationId);
+        // 🔥 ИСПОЛЬЗУЕМ JOIN FETCH ДЛЯ ИЗБЕЖАНИЯ LAZY LOADING
+        return applicationRepository.findByIdWithProjectAndFreelancer(applicationId);
+    }
+
+    // 🔥 ПОЛУЧЕНИЕ ID ПРОЕКТА ПО ID ОТКЛИКА
+    public Long getProjectIdByApplicationId(Long applicationId) {
+        Application application = getApplicationById(applicationId)
+                .orElseThrow(() -> new RuntimeException("Отклик не найден"));
+        return application.getProject().getId();
     }
 }
