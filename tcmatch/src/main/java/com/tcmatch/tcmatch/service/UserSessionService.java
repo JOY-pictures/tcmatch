@@ -1,13 +1,12 @@
 package com.tcmatch.tcmatch.service;
 
-import com.tcmatch.tcmatch.model.ProjectCreationState;
 import com.tcmatch.tcmatch.model.UserSession;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
+import com.tcmatch.tcmatch.model.dto.ProjectCreationState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import javax.management.Query;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -40,22 +39,22 @@ public class UserSessionService {
 
     // 🔥 УПРАВЛЕНИЕ СОСТОЯНИЕМ
 
-    public void setCurrentHandler(Long chatId, String handler) {
+    public void setCurrentCommand(Long chatId, String command) {
         UserSession session = getSessionAndUpdateActivity(chatId);
-        session.setCurrentHandler(handler);
-        log.debug("🔧 User {} handler set to: {}", chatId, handler);
+        session.setCurrentCommand(command);
+        log.debug("🔧 User {} handler set to: {}", chatId, command);
     }
 
-    public String getCurrentHandler(Long chatId) {
+    public String getCurrentCommand(Long chatId) {
         UserSession session = getSession(chatId);
-        return session.getCurrentHandler(); // 🔥 Возвращаем поле currentHandler
+        return session.getCurrentCommand(); // 🔥 Возвращаем поле currentHandler
     }
 
-    public void setCurrentAction(Long chatId, String handler, String action) {
+    public void setCurrentAction(Long chatId, String command, String action) {
         UserSession session = getSessionAndUpdateActivity(chatId);
-        session.setCurrentHandler(handler);
+        session.setCurrentCommand(command);
         session.setCurrentAction(action);
-        log.debug("🔧 User {} action set to: {}/{}", chatId, handler, action);
+        log.debug("🔧 User {} action set to: {}/{}", chatId, command, action);
     }
 
     public String getCurrentAction(Long chatId) {
@@ -65,7 +64,7 @@ public class UserSessionService {
 
     public void clearState(Long chatId) {
         UserSession session = getSession(chatId);
-        session.setCurrentHandler(null);
+        session.setCurrentCommand(null);
         session.setCurrentAction(null);
         session.clearContext();
         session.clearTemporaryMessages();
@@ -74,8 +73,8 @@ public class UserSessionService {
 
     public void clearHandlerState(Long chatId, String handler) {
         UserSession session = getSession(chatId);
-        if (handler.equals(session.getCurrentHandler())) {
-            session.setCurrentHandler(null);
+        if (handler.equals(session.getCurrentCommand())) {
+            session.setCurrentCommand(null);
             session.setCurrentAction(null);
             session.clearContext();
             log.debug("🧹 Cleared {} state for user: {}", handler, chatId);
@@ -240,7 +239,7 @@ public class UserSessionService {
         session.setNavigationHistory(new ArrayDeque<>());
 
         // 🔥 УСТАНАВЛИВАЕМ ТЕКУЩИЙ ЭКРАН НА ГЛАВНЫЙ
-        putToContext(chatId, "currentScreen", "main");
+        putToContext(chatId, "currentScreen", "main:menu");
 
         // 🔥 ОЧИЩАЕМ ВРЕМЕННЫЕ СООБЩЕНИЯ
         clearTemporaryMessages(chatId);
@@ -252,29 +251,50 @@ public class UserSessionService {
         log.debug("📱 Reset to main - cleared history and states for user: {}", chatId);
     }
 
-    // 🔥 АВТООЧИСТКА СТАРЫХ СЕССИЙ
+    /**
+     * 🔥 СБРАСЫВАЕТ ИСТОРИЮ НАВИГАЦИИ ПОЛЬЗОВАТЕЛЯ
+     */
+    public void clearNavigationHistory(Long chatId) {
+        try {
+            // Очищаем историю вкладок/навигации
+            // Зависит от того, как у вас реализована навигация
+            userSessions.computeIfPresent(chatId, (key, session) -> {
+                session.setNavigationHistory(new ArrayDeque<>());
+                return session;
+            });
 
-    @Scheduled(fixedRate = 300000) // 5 минут
-    public void cleanupOldSessions() {
-        LocalDateTime cutoffTime = LocalDateTime.now().minus(1, ChronoUnit.HOURS);
-        int initialSize = userSessions.size();
+            log.debug("🧹 История навигации очищена для пользователя {}", chatId);
 
-        userSessions.entrySet().removeIf(entry -> {
-            UserSession session = entry.getValue();
-            boolean shouldRemove = session.getLastActivityAt().isBefore(cutoffTime);
-            if (shouldRemove) {
-                log.debug("🧹 Removing old session for user: {} (last activity: {})",
-                        entry.getKey(), session.getLastActivityAt());
-            }
-            return shouldRemove;
-        });
-
-        int finalSize = userSessions.size();
-        if (initialSize != finalSize) {
-            log.info("🧹 Session cleanup: {} -> {} sessions (removed: {})",
-                    initialSize, finalSize, initialSize - finalSize);
+        } catch (Exception e) {
+            log.warn("⚠️ Не удалось очистить историю навигации для пользователя {}: {}", chatId, e.getMessage());
         }
     }
+
+    // 🔥 АВТООЧИСТКА СТАРЫХ СЕССИЙ
+
+//    @Scheduled(fixedRate = 600000) // 10 минут
+//    public void cleanupOldSessions() {
+//        synchronized (userSessions) {
+//            LocalDateTime cutoffTime = LocalDateTime.now().minus(1, ChronoUnit.HOURS);
+//            int initialSize = userSessions.size();
+//
+//            userSessions.entrySet().removeIf(entry -> {
+//                UserSession session = entry.getValue();
+//                boolean shouldRemove = session.getLastActivityAt().isBefore(cutoffTime);
+//                if (shouldRemove) {
+//                    log.debug("🧹 Removing old session for user: {} (last activity: {})",
+//                            entry.getKey(), session.getLastActivityAt());
+//                }
+//                return shouldRemove;
+//            });
+//
+//            int finalSize = userSessions.size();
+//            if (initialSize != finalSize) {
+//                log.info("🧹 Session cleanup: {} -> {} sessions (removed: {})",
+//                        initialSize, finalSize, initialSize - finalSize);
+//            }
+//        }
+//    }
 
     // 🔥 ДИАГНОСТИКА
 
@@ -282,7 +302,7 @@ public class UserSessionService {
         if (hasSession(chatId)) {
             UserSession session = getSession(chatId);
             log.info("🔍 Session state for {}: handler={}, action={}, context={}, tempMessages={}",
-                    chatId, session.getCurrentHandler(), session.getCurrentAction(),
+                    chatId, session.getCurrentCommand(), session.getCurrentAction(),
                     session.getContext().size(), session.getTemporaryMessageIds().size());
         } else {
             log.info("🔍 No session found for user: {}", chatId);
@@ -296,5 +316,47 @@ public class UserSessionService {
     public Deque<String> getUserHistory(Long chatId) {
         UserSession session = getSession(chatId);
         return session.getNavigationHistory();
+    }
+
+    public void remove(Long chatId, String key) {
+        UserSession session = userSessions.get(chatId); // Получаем объект сессии
+
+        if (session != null) {
+            // 🔥 Вызываем ваш существующий метод из UserSession:
+            session.removeFromContext(key);
+            log.debug("🗑️ Removed context key '{}' for user {}", key, chatId);
+        }
+    }
+
+    public List<Integer> getAndClearTemporaryMessageIds(Long chatId) {
+        UserSession session = userSessions.get(chatId);
+        if (session == null) {
+            return Collections.emptyList();
+        }
+
+        // Получаем текущий список ID
+        List<Integer> messageIds = session.getTemporaryMessageIds();
+
+        if (messageIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Создаем копию списка для возврата
+        List<Integer> idsToDelete = new ArrayList<>(messageIds);
+
+        // 🔥 Очищаем список ID в UserSession, чтобы не удалять их повторно
+        session.clearTemporaryMessages();
+
+        return idsToDelete;
+    }
+
+    public Integer getLastPushMessageId(Long chatId) {
+        UserSession session = getSession(chatId);
+        return session.getLastPushMessageId();
+    }
+
+    public void setLastPushMessageId(Long chatId, Integer messageId) {
+        UserSession session = getSession(chatId);
+        session.setLastPushMessageId(messageId);
     }
 }

@@ -23,7 +23,7 @@ public class Project {
     @Column(nullable = false)
     private String title;
 
-    @Column(length = 2000)
+    @Column(length = 3300)
     private String description;
 
     private Double budget;
@@ -32,21 +32,22 @@ public class Project {
     @Builder.Default
     private UserRole.ProjectStatus status = UserRole.ProjectStatus.OPEN;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "customer_id", nullable = false)
-    private User customer;
+    @Column(name = "deadline")
+    private LocalDateTime deadline;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "freelancer_id")
-    private User freelancer;
+    // 🔥 ЗАМЕНЯЕМ ССЫЛКУ НА User НА ID
+    @Column(name = "customer_chat_id")
+    private Long customerChatId;
 
-    private LocalDateTime deadline = LocalDateTime.now();
+    // 🔥 ЗАМЕНЯЕМ ССЫЛКУ НА User (исполнителя) НА ID
+    @Column(name = "freelancer_chat_id")
+    private Long freelancerChatId;
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    private LocalDateTime startedAt = LocalDateTime.now();
-    private LocalDateTime completedAt = LocalDateTime.now();
+    private LocalDateTime startedAt;
+    private LocalDateTime completedAt;
 
     private String requiredSkills;
     private Integer estimatedDays;

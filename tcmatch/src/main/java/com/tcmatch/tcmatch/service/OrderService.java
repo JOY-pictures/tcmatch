@@ -2,6 +2,7 @@ package com.tcmatch.tcmatch.service;
 
 import com.tcmatch.tcmatch.model.*;
 import com.tcmatch.tcmatch.model.*;
+import com.tcmatch.tcmatch.model.dto.ProjectDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.repository.OrderRepository;
 import jakarta.transaction.Transactional;
@@ -36,38 +37,39 @@ public class OrderService {
             throw new RuntimeException("Нельзя создать заказ из непринятой заявки");
         }
 
-        Project project = application.getProject();
+        ProjectDto project = projectService.getProjectDtoById(application.getProjectId()).orElseThrow(() -> new RuntimeException("Проект не найден"));
 
         // Проверяем, что проект еще открыт
         if (project.getStatus() != UserRole.ProjectStatus.OPEN) {
             throw new RuntimeException("Проект уже закрыт");
         }
 
-        // Создаем этапы оплаты (по умолчанию: 30% аванс, 70% по завершении)
-
-        List<PaymentStage> paymentStages = createDefaultPaymentStages(project.getBudget());
-
-        Order order = Order.builder()
-                .project(project)
-                .application(application)
-                .customer(project.getCustomer())
-                .freelancer(project.getFreelancer())
-                .title(project.getTitle())
-                .description(project.getDescription())
-                .totalBudget(project.getBudget())
-                .estimatedDays(project.getEstimatedDays())
-                .customerRequirements(project.getDescription())
-                .paymentStages(paymentStages)
-                .deadline(LocalDateTime.now().plusDays(project.getEstimatedDays()))
-                .build();
-
-        projectService.updateProjectStatus(project.getId(), UserRole.ProjectStatus.IN_PROGRESS);
-
-        Order savedOrder = orderRepository.save(order);
-
-        log.info("✅ Создан заказ {} из заявки {} на проект {}", savedOrder.getId(), applicationId, project.getId());
-
-        return savedOrder;
+//        // Создаем этапы оплаты (по умолчанию: 30% аванс, 70% по завершении)
+//
+//        List<PaymentStage> paymentStages = createDefaultPaymentStages(project.getBudget());
+//
+//        Order order = Order.builder()
+//                .project(project)
+//                .application(application)
+//                .customer(project.getCustomer())
+//                .freelancer(project.getFreelancer())
+//                .title(project.getTitle())
+//                .description(project.getDescription())
+//                .totalBudget(project.getBudget())
+//                .estimatedDays(project.getEstimatedDays())
+//                .customerRequirements(project.getDescription())
+//                .paymentStages(paymentStages)
+//                .deadline(LocalDateTime.now().plusDays(project.getEstimatedDays()))
+//                .build();
+//
+//        projectService.updateProjectStatus(project.getId(), UserRole.ProjectStatus.IN_PROGRESS);
+//
+//        Order savedOrder = orderRepository.save(order);
+//
+//        log.info("✅ Создан заказ {} из заявки {} на проект {}", savedOrder.getId(), applicationId, project.getId());
+//
+//        return savedOrder;
+        return null;
     }
 
     //Создание этапов оплаты по умолчанию
@@ -135,7 +137,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
         // Проверяем, что пользователь является заказчиком
-        if (!order.getCustomer().getChatId().equals(customerChatId)) {
+        if (!order.getCustomerChatId().equals(customerChatId)) {
             throw new RuntimeException("Только заказчик может принимать работу");
         }
 
@@ -161,8 +163,8 @@ public class OrderService {
 
         boolean isOnTime = !LocalDateTime.now().isAfter(order.getDeadline());
         reputationService.updateUserReputation(
-                order.getFreelancer().getId(),
-                order.getProject().getId(),
+                order.getFreelancerChatId(),
+                order.getProjectId(),
                 true, // успешное завершение
                 isOnTime,
                 order.getTotalBudget(),
@@ -171,7 +173,7 @@ public class OrderService {
         );
 
         // Обновляем проект
-        projectService.updateProjectStatus(order.getProject().getId(), UserRole.ProjectStatus.COMPLETED);
+        projectService.updateProjectStatus(order.getProjectId(), UserRole.ProjectStatus.COMPLETED);
         log.info("✅ Работа по заказу {} принята", orderId);
         return updatedOrder;
     }
@@ -183,14 +185,14 @@ public class OrderService {
 
         // Проверяем, что пользователь является участником заказа
 
-        if (!order.getCustomer().getChatId().equals(userChatId) &&
-                !order.getFreelancer().getChatId().equals(userChatId)) {
+        if (!order.getCustomerChatId().equals(userChatId) &&
+                !order.getFreelancerChatId().equals(userChatId)) {
             throw new RuntimeException("Только участники заказа могут его отменять");
         }
 
         order.setStatus(UserRole.OrderStatus.CANCELLED);
 
-        projectService.updateProjectStatus(order.getProject().getId(), UserRole.ProjectStatus.OPEN);
+        projectService.updateProjectStatus(order.getProjectId(), UserRole.ProjectStatus.OPEN);
 
         Order updatedOrder = orderRepository.save(order);
         log.info("❌ Заказ {} отменен по причине: {}", orderId, reason);
@@ -204,7 +206,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
         // Проверяем, что пользователь является заказчиком
-        if (!order.getCustomer().getChatId().equals(customerChatId)) {
+        if (!order.getCustomerChatId().equals(customerChatId)) {
             throw new RuntimeException("Только заказчик может запрашивать правки");
         }
 
@@ -243,7 +245,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
         // Проверяем, что пользователь является исполнителем
-        if (!order.getFreelancer().getChatId().equals(freelancerChatId)) {
+        if (!order.getFreelancerChatId().equals(freelancerChatId)) {
             throw new RuntimeException("Только исполнитель может отмечать правки как исправленные");
         }
 
@@ -278,7 +280,7 @@ public class OrderService {
     public Order requestClarification(Long orderId, Long freelancerChatId, String question) {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
-        if (!order.getFreelancer().getChatId().equals(freelancerChatId)) {
+        if (!order.getFreelancerChatId().equals(freelancerChatId)) {
             throw new RuntimeException("Только исполнитель может запрашивать уточнения");
         }
 
@@ -333,7 +335,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
         // Проверяем, что пользователь является заказчиком
-        if (!order.getCustomer().getChatId().equals(customerChatId)) {
+        if (!order.getCustomerChatId().equals(customerChatId)) {
             throw new RuntimeException("Только заказчик может отвечать на уточнения");
         }
 

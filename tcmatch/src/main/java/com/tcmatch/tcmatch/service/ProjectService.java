@@ -1,20 +1,27 @@
 package com.tcmatch.tcmatch.service;
 
 
+import com.tcmatch.tcmatch.events.NewProjectEvent;
 import com.tcmatch.tcmatch.model.Project;
 import com.tcmatch.tcmatch.model.User;
+import com.tcmatch.tcmatch.model.dto.ProjectDto;
+import com.tcmatch.tcmatch.model.dto.SearchRequest;
+import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,12 +30,17 @@ import java.util.stream.Collectors;
 public class ProjectService {
 
     private final ProjectRepository projectRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
     private final UserService userService;
 
-    private Project createProject(Long customerChatId, String title, String description,
-                                  Double budget, LocalDateTime deadline, String requiredSkills,
+    @Transactional
+    public Project createProject(Long customerChatId, String title, String description,
+                                  Double budget, String requiredSkills,
                                   Integer estimateDays) {
         User customer = userService.findByChatId(customerChatId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        customerChatId = customer.getChatId();
 
         // Проверяем, что пользователь имеет право создавать проекты
         if (!userService.hasFullAccess(customerChatId)) {
@@ -39,13 +51,16 @@ public class ProjectService {
                 .title(title)
                 .description(description)
                 .budget(budget)
-                .customer(customer)
-                .deadline(deadline)
+                .customerChatId(customerChatId)
+                .deadline(null)
                 .requiredSkills(requiredSkills)
                 .estimatedDays(estimateDays)
                 .build();
 
         Project savedProject = projectRepository.save(project);
+
+        eventPublisher.publishEvent(new NewProjectEvent(getProjectDtoById(project.getId()).orElseThrow(() -> new RuntimeException("Проект не найден")), project.getCustomerChatId()));
+
         log.info("✅ Создан новый проект: {} пользователем {}", title, customerChatId);
         return savedProject;
     }
@@ -112,22 +127,22 @@ public class ProjectService {
     }
 
     public List<Project> getUserProjects(Long chatId) {
-        User user = userService.findByChatId(chatId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-
-        // 🔥 ИСПОЛЬЗУЕМ МЕТОД С JOIN FETCH
-        return projectRepository.findByCustomerWithApplications(user);
+        // 🔥 ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
+        return projectRepository.findByCustomerChatIdOrderByCreatedAtDesc(chatId);
     }
 
+//    public List<ProjectDto> getUserProjectsDto(Long chatId) {
+//        return emp<>;
+//    }
+
     public List<Project> getFreelancerProjects(Long chatId) {
-        return projectRepository.findProjectsByFreelancerChatId(chatId);
+        // 🔥 ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
+        return projectRepository.findByFreelancerChatIdOrderByCreatedAtDesc(chatId);
     }
 
     public Optional<Project> getProjectById(Long projectId) {
-        // 🔥 ИСПОЛЬЗУЕМ МЕТОД С JOIN FETCH
-        Optional<Project> project = projectRepository.findByIdWithCustomerAndFreelancer(projectId);
-
-        return project;
+        // 🔥 ИСПОЛЬЗУЕМ СТАНДАРТНЫЙ МЕТОД
+        return projectRepository.findById(projectId);
     }
 
     // 🔥 ОТДЕЛЬНЫЙ МЕТОД С НОВОЙ ТРАНЗАКЦИЕЙ
@@ -150,6 +165,7 @@ public class ProjectService {
         return projectRepository.isProjectCustomer(projectId, chatId);
     }
 
+    @Transactional
     public Project updateProjectStatus(Long projectId, UserRole.ProjectStatus newStatus) {
         Project project = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("Проект не найден"));
         project.setStatus(newStatus);
@@ -166,6 +182,7 @@ public class ProjectService {
      * Обновляет только определенные поля проекта
      * Защита от случайного изменения важных данных
      */
+    @Transactional
     public Project updateProjectFields(Long projectId, String title, String description,
                                        Double budget, LocalDateTime deadline, String requiredSkills) {
         Project project = projectRepository.findById(projectId)
@@ -183,16 +200,20 @@ public class ProjectService {
         return updatedProject;
     }
 
+    @Transactional
     public Project updateProject(Project project) {
         return projectRepository.save(project);
     }
 
+    @Transactional
     public Project assignFreelancer(Long projectId, long freelancerChatId) {
         Project project = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("Проект не найден"));
 
         User freelancer = userService.findByChatId(freelancerChatId).orElseThrow(()-> new RuntimeException("Исполнитель не найден"));
 
-        project.setFreelancer(freelancer);
+        freelancerChatId = freelancer.getChatId();
+
+        project.setFreelancerChatId(freelancerChatId);
         project.setStatus(UserRole.ProjectStatus.IN_PROGRESS);
         project.setStartedAt(LocalDateTime.now());
 
@@ -213,5 +234,196 @@ public class ProjectService {
         } catch (Exception e) {
             log.error("❌ Ошибка инкремента просмотров: {}", e.getMessage());
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Project> findAllProjectsByIds(List<Long> projectsIds) {
+        return projectRepository.findAllById(projectsIds);
+    }
+
+    public List<Long> searchActiveProjectIds(SearchRequest searchRequest) {
+        List<Project> projects = searchActiveProjects(searchRequest);
+        return projects.stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+    }
+
+    public List<Project> getFavoriteProjectsPage(Long chatId, int page, int pageSize) {
+        // 1. Получить все ID избранных проектов из UserService
+        List<Long> favoriteIds = userService.getFavoriteProjectIds(chatId);
+
+        // 2. Определить диапазон ID для текущей страницы
+        int start = page * pageSize;
+        int end = Math.min(start + pageSize, favoriteIds.size());
+
+        if (start >= end) {
+            return Collections.emptyList(); // Страница пуста или не существует
+        }
+        List<Long> pageIds = favoriteIds.subList(start, end);
+
+        // 3. Загрузить проекты по ID (предполагаем, что findAllById существует)
+        List<Project> projects = findAllProjectsByIds(pageIds);
+
+        return projects.stream()
+                .filter(p -> p.getStatus() == UserRole.ProjectStatus.OPEN)
+                .sorted(Comparator.comparing(Project::getCreatedAt).reversed())
+                .collect(Collectors.toList());
+    }
+
+    public int getFavoriteProjectsCount(Long chatId) {
+        // В идеале этот метод должен загружать все избранные ID и фильтровать
+        // количество активных, но для простоты, пока используем общий размер.
+        // Если требуется точный подсчет, придется загружать и фильтровать все проекты.
+        return userService.getFavoriteProjectIds(chatId).size();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Project> searchActiveProjects(SearchRequest request) {
+        if (request == null || request.isEmpty()) {
+            UserRole.ProjectStatus status = UserRole.ProjectStatus.OPEN;
+            return projectRepository.findAllByStatusOrderByCreatedAtDesc(status);
+        }
+
+        // 🔥 Создание спецификации (динамического запроса)
+        Specification<Project> spec = (root, query, cb) ->
+                cb.equal(root.get("status"), "OPEN"
+        );
+
+        if (request.getKeyword() != null && !request.getKeyword().isEmpty()) {
+            spec = spec.and((root, query, cb) ->
+                    cb.like(cb.lower(root.get("title")), "%" + request.getKeyword().toLowerCase() + "%")
+            );
+        }
+
+        if (request.getMinBudget() != null) {
+            spec = spec.and((root, query, cb) ->
+                    cb.greaterThanOrEqualTo(root.get("budget"), request.getMinBudget())
+            );
+        }
+
+        // Настраиваем сортировку
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
+
+        // Выполняем поиск
+        return projectRepository.findAll(spec, sort);
+    }
+
+    // ProjectService.java - ДОБАВЛЯЕМ МЕТОДЫ ДЛЯ ID
+    public List<Long> getFavoriteProjectIds(Long chatId) {
+        // 🔥 ВОЗВРАЩАЕМ ТОЛЬКО ID (уже есть в UserService)
+        return userService.getFavoriteProjectIds(chatId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> searchProjectIds(SearchRequest searchRequest) {
+        List<Project> projects = projectRepository.findActiveProjectsByFilters(
+                searchRequest.getKeyword(),
+                searchRequest.getRequiredSkills(),
+                searchRequest.getMinBudget()
+        );
+        return projects.stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> getUserProjectIds(Long chatId) {
+        List<Project> projects = projectRepository.findByCustomerChatId(chatId);
+        return projects.stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ProjectDto> getProjectDtoById(Long projectId) {
+        return projectRepository.findById(projectId)
+                .map(project -> {
+                    // 🔥 Загружаем заказчика по ID
+                    UserDto customer = userService.getUserDtoByChatId(project.getCustomerChatId()).orElse(null);
+                    return ProjectDto.fromEntity(project, customer);
+                });
+    }
+
+    @Transactional
+    public List<ProjectDto> getProjectsByIds(List<Long> projectIds) {
+        if (projectIds.isEmpty()) return Collections.emptyList();
+
+        List<Project> projects = projectRepository.findAllById(projectIds);
+
+        // 🔥 Пакетная загрузка заказчиков по их ID
+        List<Long> customerIds = projects.stream()
+                .map(Project::getCustomerChatId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, UserDto> customers = userService.getUsersDtoByChatIds(customerIds)
+                .stream()
+                .collect(Collectors.toMap(UserDto::getId, Function.identity()));
+
+        return projects.stream()
+                .map(project -> ProjectDto.fromEntity(project, customers.get(project.getCustomerChatId())))
+                .collect(Collectors.toList());
+    }
+
+
+
+    public Long getCustomerChatIdByProjectId(Long projectId) {
+        // 🔥 Вариант 1: если есть метод getProjectById который возвращает ProjectDto
+        Project project = getProjectById(projectId)
+                .orElseThrow(() -> new RuntimeException("Проект не найден"));
+        return project.getCustomerChatId();
+    }
+
+    public String getProjectTitleById(Long projectId) {
+        ProjectDto project = getProjectDtoById(projectId)
+                .orElseThrow(() -> new RuntimeException("Проект не найден"));
+        return project.getTitle();
+    }
+
+    // 🔥 НОВЫЙ МЕТОД: Получение ID проектов, созданных заказчиком
+    public List<Long> getProjectIdsByCustomerChatId(Long customerChatId) {
+        // Используем findByCustomerChatIdOrderByCreatedAtDesc из ProjectRepository.java
+        return projectRepository.findByCustomerChatIdOrderByCreatedAtDesc(customerChatId).stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void cancelProject(Long projectId, Long customerChatId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Проект не найден"));
+
+        // 🔥 ПРОВЕРКА ПРАВ
+        if (!project.getCustomerChatId().equals(customerChatId)) {
+            throw new RuntimeException("У вас нет прав для отмены этого проекта");
+        }
+
+        // 🔥 ПРОВЕРКА СТАТУСА
+        if (!canCancelProject(project.getStatus())) {
+            throw new RuntimeException("Нельзя отменить проект со статусом: " + project.getStatus());
+        }
+
+        try {
+            // 🔥 ОБНОВЛЯЕМ СТАТУС ПРОЕКТА
+            project.setStatus(UserRole.ProjectStatus.CANCELLED);
+//            project.setUpdatedAt(LocalDateTime.now());
+
+            projectRepository.save(project);
+
+            log.info("✅ Проект {} отменен пользователем {}", projectId, customerChatId);
+
+        } catch (Exception e) {
+            log.error("❌ Ошибка отмены проекта {}: {}", projectId, e.getMessage());
+            throw new RuntimeException("Не удалось отменить проект: " + e.getMessage());
+        }
+    }
+
+    private boolean canCancelProject(UserRole.ProjectStatus projectStatus) {
+        // 🔥 ПРОЕКТ МОЖНО УДАЛИТЬ ТОЛЬКО В ОПРЕДЕЛЕННЫХ СТАТУСАХ
+        return switch (projectStatus) {
+            case OPEN -> true;
+            case IN_PROGRESS, COMPLETED, CANCELLED, UNDER_REVIEW, DISPUTE -> false;
+        };
     }
 }

@@ -24,21 +24,17 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
     @JoinColumn(name = "project_id", nullable = false)
-    private Project project;
+    private Long projectId;
 
-    @OneToOne
-    @JoinColumn(name = "application_if", nullable = false)
-    private Application application;
+    @JoinColumn(name = "application_id", nullable = false)
+    private Long applicationId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "customer_id", nullable = false)
-    private User customer;
+    @JoinColumn(name = "customer_chat_id", nullable = false)
+    private Long customerChatId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "freelancer_id", nullable = false)
-    private User freelancer;
+    @JoinColumn(name = "freelancer_chat_id", nullable = false)
+    private Long freelancerChatId;
 
     private String title;
     private String description;

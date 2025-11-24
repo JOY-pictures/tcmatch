@@ -12,37 +12,25 @@ import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
-    // Найти заказы заказчика
-    List<Order> findByCustomerOrderByCreatedAtDesc(User customer);
-
-    // Найти заказы исполнителя
-    List<Order> findByFreelancerOrderByCreatedAtDesc(User freelancer);
+    List<Order> findByCustomerChatIdOrderByCreatedAtDesc(Long customerChatId);
+    List<Order> findByFreelancerChatIdOrderByCreatedAtDesc(Long freelancerChatId);
 
     // Найти заказы по статусу
     List<Order> findByStatusOrderByCreatedAtDesc(UserRole.OrderStatus status);
 
-    // Найти заказы пользователя (как заказчика или исполнителя)
-    @Query("SELECT o FROM Order o WHERE o.customer.chatId = :chatId OR o.freelancer.chatId = :chatId ORDER BY o.createdAt DESC")
-    List<Order> findByUserChatId(@Param("chatId") Long chatId);
-
-
-    // Найти активные заказы пользователя
-    @Query("SELECT o FROM Order o WHERE (o.customer.chatId = :chatId OR o.freelancer.chatId = :chatId) " +
-            "AND o.status IN ('CREATED', 'IN_PROGRESS', 'UNDER_REVIEW', 'REVISION') " +
-            "ORDER BY o.createdAt DESC")
-    List<Order> findActiveOrdersByUserChatId(@Param("chatId") Long chatId);
-
     // Найти заказ по проекту
     Optional<Order> findByProjectId(Long projectId);
-
     // Найти заказ по заявке
     Optional<Order> findByApplicationId(Long applicationId);
 
-    // Количество активных заказов пользователя
-    @Query("SELECT COUNT(o) FROM Order o WHERE (o.customer.chatId = :chatId OR o.freelancer.chatId = :chatId) " +
-            "AND o.status IN ('CREATED', 'IN_PROGRESS', 'UNDER_REVIEW', 'REVISION')")
-    long countActiveOrdersByUserChatId(@Param("chatId") Long chatId);
-
     @Query("SELECT o FROM Order o WHERE o.deadline < CURRENT_TIMESTAMP AND o.status IN ('IN_PROGRESS', 'UNDER_REVIEW')")
     List<Order> findOverdueOrders();
+
+    // 🔥 ЭТОТ МЕТОД БУДЕТ РАБОТАТЬ - поля customerChatId и freelancerChatId существуют
+    @Query("SELECT o FROM Order o WHERE o.customerChatId = :chatId OR o.freelancerChatId = :chatId ORDER BY o.createdAt DESC")
+    List<Order> findByUserChatId(@Param("chatId") Long chatId);
+
+    // 🔥 ОБЪЕДИНЕННЫЙ МЕТОД ДЛЯ ПОДСЧЕТА АКТИВНЫХ ЗАКАЗОВ ПОЛЬЗОВАТЕЛЯ
+    @Query("SELECT COUNT(o) FROM Order o WHERE (o.customerChatId = :userChatId OR o.freelancerChatId = :userChatId) AND o.status IN ('CREATED', 'IN_PROGRESS', 'UNDER_REVIEW', 'REVISION')")
+    long countActiveOrdersByUserChatId(@Param("userChatId") Long userChatId);
 }

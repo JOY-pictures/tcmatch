@@ -15,6 +15,8 @@ public class ApplicationCreationState {
     private LocalDateTime createdAt;
     private boolean isEditing = false; // 🔥 ФЛАГ РЕДАКТИРОВАНИЯ
 
+    private Integer messageIdToDelete;
+
     public ApplicationCreationState(Long chatId, Long projectId) {
         this.chatId = chatId;
         this.projectId = projectId;

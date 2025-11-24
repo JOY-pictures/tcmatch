@@ -1,13 +1,18 @@
 package com.tcmatch.tcmatch.service;
 
+import com.tcmatch.tcmatch.model.User;
+import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -17,103 +22,163 @@ public class SubscriptionService {
     private final UserService userService;
 
     // 🔥 Храним информацию о использованных откликах
-    private final Map<Long, UserSubscriptionInfo> userSubscriptions = new ConcurrentHashMap<>();
+//    private final Map<Long, UserSubscriptionInfo> userSubscriptions = new ConcurrentHashMap<>();
 
-    public static class UserSubscriptionInfo {
-        public SubscriptionPlan plan;
-        public int usedApplications;
-        public LocalDateTime subscriptionStartDate;
-        public LocalDateTime subscriptionEndDate;
-        public boolean isActive;
+    /**
+     * 🔥 ПОЛУЧЕНИЕ ТАРИФА ПОЛЬЗОВАТЕЛЯ
+     */
+    public SubscriptionPlan getUserSubscriptionPlan(Long chatId) {
+        User user = userService.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        public UserSubscriptionInfo(SubscriptionPlan plan) {
-            this.plan = plan;
-            this.usedApplications = 0;
-            this.subscriptionStartDate = LocalDateTime.now();
-            this.subscriptionEndDate = LocalDateTime.now().plusDays(plan.getSubscriptionDays());
-            this.isActive = true;
+        // 🔥 Если платная подписка истекла - возвращаем на FREE
+        if (user.getSubscriptionPlan() != SubscriptionPlan.FREE &&
+                !isSubscriptionActive(user)) {
+            downgradeToFreePlan(user);
+            return SubscriptionPlan.FREE;
         }
 
-        // 🔥 ПОЛУЧЕНИЕ ОСТАВШИХСЯ ОТКЛИКОВ
-        public int getRemainingApplications() {
-            return Math.max(0, plan.getMonthlyApplicationsLimit() - usedApplications);
-        }
-
-        // 🔥 ПРОВЕРКА МОЖНО ЛИ ИСПОЛЬЗОВАТЬ ОТКЛИК
-        public boolean canUseApplication() {
-            return isActive && getRemainingApplications() > 0;
-        }
+        return user.getSubscriptionPlan();
     }
 
-    // 🔥 ПРОВЕРКА ДОСТУПНЫХ ОТКЛИКОВ
+    /**
+     * 🔥 ОБНОВЛЕНИЕ ПОДПИСКИ ПОЛЬЗОВАТЕЛЯ
+     */
+    @Transactional
+    public void updateUserSubscription(Long chatId, SubscriptionPlan newPlan) {
+        User user = userService.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setSubscriptionPlan(newPlan);
+        user.setUsedApplications(0);
+        user.setPeriodStart(LocalDateTime.now());
+        user.setPeriodEnd(LocalDateTime.now().plusDays(newPlan.getSubscriptionDays()));
+        user.setSubscriptionExpiresAt(user.getPeriodEnd());
+        user.setUpdatedAt(LocalDateTime.now());
+
+        userService.updateUser(user); // 🔥 ИСПОЛЬЗУЕМ UserService
+
+        log.info("💎 Пользователь {} перешел на тариф: {}", chatId, newPlan.getDisplayName());
+    }
+
+    /**
+     * 🔥 ПРОВЕРКА АКТИВНОСТИ ПОДПИСКИ (ОБНОВЛЕННАЯ)
+     */
+    private boolean isSubscriptionActive(User user) {
+        // 🔥 FREE тариф всегда активен (бессрочный)
+        if (user.getSubscriptionPlan() == SubscriptionPlan.FREE) {
+            return true;
+        }
+
+        // 🔥 Для платных тарифов проверяем срок действия
+        if (user.getSubscriptionExpiresAt() == null) {
+            return false;
+        }
+        return LocalDateTime.now().isBefore(user.getSubscriptionExpiresAt());
+    }
+
+    /**
+     * 🔥 ПОЛУЧЕНИЕ ОСТАВШИХСЯ ОТКЛИКОВ
+     */
+    private int getRemainingApplications(User user) {
+        SubscriptionPlan plan = getUserSubscriptionPlan(user.getChatId());
+        return Math.max(0, plan.getMonthlyApplicationsLimit() - user.getUsedApplications());
+    }
+
+    /**
+     * 🔥 ПРОВЕРКА ВОЗМОЖНОСТИ ИСПОЛЬЗОВАТЬ ОТКЛИК (ИСПРАВЛЕННАЯ ЛОГИКА)
+     */
+    private boolean canUseApplication(User user) {
+        // 🔥 Пользователь ВСЕГДА может использовать отклики в рамках своего тарифа
+        return getRemainingApplications(user) > 0;
+    }
+
+    /**
+     * 🔥 ПРОВЕРКА ДОСТУПНЫХ ОТКЛИКОВ
+     */
     public SubscriptionCheckResult checkApplicationLimits(Long chatId) {
-        UserSubscriptionInfo subscription = getUserSubscriptionInfo(chatId);
+        User user = userService.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        boolean hasSubscription = subscription.isActive;
-        int remainingApplications = subscription.getRemainingApplications();
-        boolean canApply = subscription.canUseApplication();
+        SubscriptionPlan plan = getUserSubscriptionPlan(chatId);
+        int remainingApplications = getRemainingApplications(user);
+        boolean canApply = remainingApplications > 0;
 
-        return new SubscriptionCheckResult(canApply, hasSubscription, remainingApplications, subscription.plan);
+        return new SubscriptionCheckResult(canApply, plan != SubscriptionPlan.FREE,
+                remainingApplications, plan);
     }
 
-    // 🔥 ИСПОЛЬЗОВАНИЕ ОТКЛИКА
+    /**
+     * 🔥 ИСПОЛЬЗОВАНИЕ ОТКЛИКА
+     */
+    @Transactional
     public boolean useApplication(Long chatId) {
-        UserSubscriptionInfo subscription = getUserSubscriptionInfo(chatId);
+        User user = userService.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (!subscription.canUseApplication()) {
+        if (getRemainingApplications(user) <= 0) {
             return false;
         }
 
-        subscription.usedApplications++;
-        userSubscriptions.put(chatId, subscription);
+        user.setUsedApplications(user.getUsedApplications() + 1);
+        userService.updateUser(user);
 
         log.info("📨 Пользователь {} использовал отклик. Использовано: {}/{}, Осталось: {}",
-                chatId,
-                subscription.usedApplications,
-                subscription.plan.getMonthlyApplicationsLimit(),
-                subscription.getRemainingApplications());
+                chatId, user.getUsedApplications(),
+                getUserSubscriptionPlan(chatId).getMonthlyApplicationsLimit(),
+                getRemainingApplications(user));
 
         return true;
     }
 
-    // 🔥 ПОЛУЧЕНИЕ ИНФОРМАЦИИ О ПОДПИСКЕ
-    private UserSubscriptionInfo getUserSubscriptionInfo(Long chatId) {
-        return userSubscriptions.computeIfAbsent(chatId, k -> {
-            // 🔥 ПО УМОЛЧАНИЮ - БЕСПЛАТНЫЙ ТАРИФ (3 отклика в месяц)
-            return new UserSubscriptionInfo(SubscriptionPlan.FREE);
-        });
-    }
-
-    // 🔥 ОБНОВЛЕНИЕ ПОДПИСКИ
-    public void updateSubscription(Long chatId, SubscriptionPlan newPlan) {
-        UserSubscriptionInfo newSubscription = new UserSubscriptionInfo(newPlan);
-        userSubscriptions.put(chatId, newSubscription);
-        log.info("💎 Пользователь {} перешел на тариф: {}", chatId, newPlan.getName());
-    }
-
-    // 🔥 СБРОС МЕСЯЧНЫХ ЛИМИТОВ (будет вызываться 1 числа каждого месяца)
+    /**
+     * 🔥 СБРОС МЕСЯЧНЫХ ЛИМИТОВ (будет вызываться 1 числа каждого месяца)
+     */
+    @Transactional
     public void resetMonthlyLimits() {
-        userSubscriptions.forEach((chatId, subscription) -> {
-            if (subscription.isActive) {
-                subscription.usedApplications = 0;
-                subscription.subscriptionStartDate = LocalDateTime.now();
-                subscription.subscriptionEndDate = LocalDateTime.now().plusDays(subscription.plan.getSubscriptionDays());
-            }
-        });
-        log.info("🔄 Сброшены месячные лимиты откликов");
+        // 🔥 ИСПОЛЬЗУЕМ UserService для получения всех пользователей
+        List<User> allUsers = userService.getAllUsers();
+
+        List<User> usersWithActiveSubscriptions = allUsers.stream()
+                .filter(this::isSubscriptionActive)
+                .collect(Collectors.toList());
+
+        for (User user : usersWithActiveSubscriptions) {
+            user.setUsedApplications(0);
+            user.setPeriodStart(LocalDateTime.now());
+            user.setPeriodEnd(LocalDateTime.now().plusDays(user.getSubscriptionPlan().getSubscriptionDays()));
+            user.setUpdatedAt(LocalDateTime.now());
+            userService.updateUser(user); // 🔥 ИСПОЛЬЗУЕМ UserService
+        }
+
+        log.info("🔄 Сброшены месячные лимиты откликов для {} пользователей", usersWithActiveSubscriptions.size());
     }
 
-    // 🔥 ПОЛУЧЕНИЕ СТАТИСТИКИ ПОЛЬЗОВАТЕЛЯ
+    /**
+     * 🔥 ПОЛУЧЕНИЕ СТАТИСТИКИ ПОЛЬЗОВАТЕЛЯ
+     */
     public UserSubscriptionStats getUserStats(Long chatId) {
-        UserSubscriptionInfo subscription = getUserSubscriptionInfo(chatId);
+        User user = userService.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         return new UserSubscriptionStats(
-                subscription.plan,
-                subscription.usedApplications,
-                subscription.getRemainingApplications(),
-                subscription.subscriptionStartDate,
-                subscription.subscriptionEndDate
+                user.getSubscriptionPlan(),
+                user.getUsedApplications(),
+                getRemainingApplications(user),
+                user.getPeriodStart(),
+                user.getPeriodEnd()
         );
+    }
+
+    /**
+     * 🔥 ПЕРЕХОД НА FREE ТАРИФ
+     */
+    private void downgradeToFreePlan(User user) {
+        user.setSubscriptionPlan(SubscriptionPlan.FREE);
+        user.setUsedApplications(0);
+        user.setSubscriptionExpiresAt(null);
+        userService.updateUser(user);
+        log.info("⬇️ Пользователь {} переведен на FREE тариф", user.getChatId());
     }
 
     // 🔥 РЕЗУЛЬТАТ ПРОВЕРКИ ПОДПИСКИ

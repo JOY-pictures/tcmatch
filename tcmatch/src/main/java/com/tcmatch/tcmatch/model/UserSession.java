@@ -1,6 +1,7 @@
 package com.tcmatch.tcmatch.model;
 
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
+import com.tcmatch.tcmatch.model.dto.ProjectCreationState;
 import com.tcmatch.tcmatch.service.ProjectSearchService;
 import lombok.Data;
 
@@ -15,7 +16,7 @@ public class UserSession {
     private LocalDateTime lastActivityAt;
 
     // 🔥 ОСНОВНОЕ СОСТОЯНИЕ
-    private String currentHandler;        // "projects", "application", "my_projects"
+    private String currentCommand;        // "projects", "application", "my_projects"
     private String currentAction;         // "search", "create", "edit"
     private Map<String, Object> context;  // Гибкие данные для любого хендлера
 
@@ -26,6 +27,7 @@ public class UserSession {
 
     // 🔥 СИСТЕМНЫЕ ДАННЫЕ
     private Integer mainMessageId;
+    private Integer lastPushMessageId; // <-- НОВОЕ ПОЛЕ
     private List<Integer> temporaryMessageIds;
     private Deque<String> navigationHistory;
 
@@ -89,11 +91,11 @@ public class UserSession {
 
     // 🔥 ПРОВЕРКИ СОСТОЯНИЯ
     public boolean isInHandler(String handler) {
-        return handler.equals(this.currentHandler);
+        return handler.equals(this.currentCommand);
     }
 
     public boolean isInAction(String handler, String action) {
-        return handler.equals(this.currentHandler) && action.equals(this.currentAction);
+        return handler.equals(this.currentCommand) && action.equals(this.currentAction);
     }
 
     public boolean hasProjectCreationState() {

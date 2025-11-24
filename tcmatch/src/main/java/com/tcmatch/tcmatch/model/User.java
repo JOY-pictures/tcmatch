@@ -1,5 +1,6 @@
 package com.tcmatch.tcmatch.model;
 
+import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -8,6 +9,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -24,10 +27,10 @@ public class User {
     private Long chatId;
 
     @Column(unique = true)
-    private String username;
+    private String userName;
 
-    private String firstname;
-    private String lastname;
+    private String firstName;
+    private String lastName;
 
     @Enumerated(EnumType.STRING)
     private UserRole role;
@@ -82,4 +85,26 @@ public class User {
     private String specialization; // "Backend", "Frontend", "Mobile", etc.
     private String experienceLevel; // "Junior", "Middle", "Senior"
     private String skills; // "Java, Spring, PostgreSQL, Docker"
+
+    @Builder.Default
+    private List<Long> favoriteProjects = new ArrayList<>();
+
+    // 🔥 ПОЛЕ ПОДПИСКИ
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private SubscriptionPlan subscriptionPlan = SubscriptionPlan.FREE;
+
+    private LocalDateTime subscriptionExpiresAt;
+
+    @Builder.Default
+    private int usedApplications = 0;
+
+    private LocalDateTime periodStart; // начало текущего периода
+    private LocalDateTime periodEnd;   // конец текущего периода
+
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now();
 }
