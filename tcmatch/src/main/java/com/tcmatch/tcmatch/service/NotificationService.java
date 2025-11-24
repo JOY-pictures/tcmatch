@@ -327,7 +327,7 @@ public class NotificationService {
                     // 🔥 FREE и BASIC - с задержкой
                     log.info("⏰ Отложенное уведомление для {} (тариф: {})",
                             freelancer.getChatId(), userPlan.name());
-                    scheduleDelayedNotification(freelancer.getChatId(), project, 1L);
+                    scheduleDelayedNotification(freelancer.getChatId(), project, 0L);
                 }
             }
 

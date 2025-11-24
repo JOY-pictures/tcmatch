@@ -85,10 +85,4 @@ public class Order {
 
     private String customerFeedback; // Отзыв заказчика
     private String freelancerFeedback; // Отзыв исполнителя
-
-    @Builder.Default
-    private Double customerRating = 0.0;
-
-    @Builder.Default
-    private Double freelancerRating = 0.0;
 }
