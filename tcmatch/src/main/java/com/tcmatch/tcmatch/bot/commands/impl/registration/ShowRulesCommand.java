@@ -60,7 +60,8 @@ public class ShowRulesCommand implements Command {
                 """;
 
             InlineKeyboardMarkup keyboard = registrationKeyboard.createRegistrationInProgressKeyboard(
-                    UserRole.RegistrationStatus.RULES_VIEWED
+                    UserRole.RegistrationStatus.RULES_VIEWED,
+                    chatId
             );
 
             Integer docMessageId = botExecutor.sendDocMessageReturnId(chatId, resource, "Документ-оферта.pdf");

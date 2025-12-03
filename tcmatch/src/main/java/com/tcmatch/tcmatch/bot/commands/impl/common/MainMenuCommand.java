@@ -38,7 +38,7 @@ public class MainMenuCommand implements Command {
             }
 
 
-            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard();
+            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard(chatId);
 
             Integer mainMessageId = botExecutor.getOrCreateMainMessageId(context.getChatId());
             botExecutor.editMessageWithHtml(context.getChatId(), mainMessageId, text, keyboard);

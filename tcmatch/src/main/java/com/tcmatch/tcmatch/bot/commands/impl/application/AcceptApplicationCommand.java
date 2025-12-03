@@ -3,6 +3,7 @@ package com.tcmatch.tcmatch.bot.commands.impl.application;
 import com.tcmatch.tcmatch.bot.BotExecutor;
 import com.tcmatch.tcmatch.bot.commands.Command;
 import com.tcmatch.tcmatch.bot.commands.CommandContext;
+import com.tcmatch.tcmatch.bot.commands.impl.order.OrderWizardStartCommand;
 import com.tcmatch.tcmatch.bot.keyboards.CommonKeyboards;
 import com.tcmatch.tcmatch.service.ApplicationService;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class AcceptApplicationCommand implements Command {
     private final ApplicationService applicationService;
     private final BotExecutor botExecutor;
     private final CommonKeyboards commonKeyboards;
+    private final OrderWizardStartCommand orderWizardStartCommand;
 
     @Override
     public boolean canHandle(String actionType, String action) {
@@ -31,13 +33,10 @@ public class AcceptApplicationCommand implements Command {
 
             // 1. 🔥 ВЫПОЛНЯЕМ БИЗНЕС-ЛОГИКУ
             // Этот метод также опубликует событие для "Наблюдателя"
-            applicationService.acceptApplication(applicationId, chatId);
+//            applicationService.acceptApplication(applicationId, chatId);
 
-            log.info("Отклик {} принят заказчиком {}", applicationId, chatId);
-
-            Integer messageId = botExecutor.getOrCreateMainMessageId(chatId);
-
-            botExecutor.editMessageWithHtml(chatId, messageId,"✅ <b>Отклик пользователя принят!</b> \n\n<u>Исполнитель был проинформирован</u>", commonKeyboards.createToMainMenuKeyboard());
+            // 🔥 ПЕРЕНАПРАВЛЯЕМ НА МАСТЕР СОЗДАНИЯ ЗАКАЗА
+            orderWizardStartCommand.execute(context);
 
         } catch (Exception e) {
             // TODO: Добавить обработку, если заказчик не является владельцем

@@ -3,11 +3,14 @@ package com.tcmatch.tcmatch.bot.commands.impl.application;
 import com.tcmatch.tcmatch.bot.BotExecutor;
 import com.tcmatch.tcmatch.bot.commands.Command;
 import com.tcmatch.tcmatch.bot.commands.CommandContext;
+import com.tcmatch.tcmatch.bot.commands.impl.order.OrderDetailsCommand;
 import com.tcmatch.tcmatch.bot.keyboards.ApplicationKeyboards;
+import com.tcmatch.tcmatch.model.Order;
 import com.tcmatch.tcmatch.model.dto.ApplicationDto;
 import com.tcmatch.tcmatch.model.dto.ProjectDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.service.ApplicationService;
+import com.tcmatch.tcmatch.service.OrderService;
 import com.tcmatch.tcmatch.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 @Component
 @Slf4j
@@ -25,6 +29,8 @@ public class ApplicationDetailsCommand implements Command {
     private final ApplicationService applicationService;
     private final ProjectService projectService;
     private final ApplicationKeyboards applicationKeyboards;
+    private final OrderService orderService;
+    private final OrderDetailsCommand orderDetailsCommand;
 
     @Override
     public boolean canHandle(String actionType, String action) {
@@ -52,28 +58,54 @@ public class ApplicationDetailsCommand implements Command {
             // 🔥 УДАЛЯЕМ ПРЕДЫДУЩИЕ СООБЩЕНИЯ
             botExecutor.deletePreviousMessages(chatId);
 
-            // --- Готовим текст и клавиатуру в зависимости от роли ---
-            String text;
-            InlineKeyboardMarkup keyboard;
+            // 2. 🔥 ГЕНИАЛЬНАЯ ЛОГИКА: Проверяем статус отклика
+            if (application.getStatus() == UserRole.ApplicationStatus.ACCEPTED) {
 
-            if (chatId.equals(freelancerChatId)) {
-                // --- ЛОГИКА ДЛЯ ИСПОЛНИТЕЛЯ ---
-                text = formatFreelancerApplicationDetails(application); // Переименовали старый метод
-                keyboard = applicationKeyboards.createApplicationDetailsKeyboard(
-                        application.getId(),
-                        chatId // Передаем chatId
-                );
+                // 3. 🔥 ПЕРЕНАПРАВЛЕНИЕ: Если отклик ПРИНЯТ, ищем Заказ
+                Optional<Order> order = orderService.findByApplicationId(applicationId);
+
+                if (order.isPresent()) {
+                    log.info("Application {} is ACCEPTED. Redirecting Freelancer {} to OrderDetailsCommand.", applicationId, chatId);
+
+                    // Передаем ID Заказа в OrderDetailsCommand
+                    context.setParameter(order.get().getId().toString());
+                    orderDetailsCommand.execute(context);
+
+                } else {
+                    // (Ошибка: отклик принят, но заказ не найден - такого быть не должно)
+                    botExecutor.editMessageWithHtml(chatId, context.getMessageId(), "❌ Ошибка: Заказ не найден, хотя отклик принят.", null);
+                }
+
             } else {
-                // --- ЛОГИКА ДЛЯ ЗАКАЗЧИКА ---
-                text = formatCustomerApplicationDetails(application); // 🔥 Новый метод
-                keyboard = applicationKeyboards.createApplicationDetailsKeyboard(
-                        application.getId(),
-                        chatId // Передаем chatId
-                );
+
+                // 4. СТАНДАРТНАЯ ЛОГИКА: Если PENDING или REJECTED, показываем детали ОТКЛИКА
+                log.info("Application {} is {}. Showing Application details.", applicationId, application.getStatus());
+
+                // --- Готовим текст и клавиатуру в зависимости от роли ---
+                String text;
+                InlineKeyboardMarkup keyboard;
+
+                if (chatId.equals(freelancerChatId)) {
+                    // --- ЛОГИКА ДЛЯ ИСПОЛНИТЕЛЯ ---
+                    text = formatFreelancerApplicationDetails(application); // Переименовали старый метод
+                    keyboard = applicationKeyboards.createApplicationDetailsKeyboard(
+                            application.getId(),
+                            chatId // Передаем chatId
+                    );
+                } else {
+                    // --- ЛОГИКА ДЛЯ ЗАКАЗЧИКА ---
+                    text = formatCustomerApplicationDetails(application); // 🔥 Новый метод
+                    keyboard = applicationKeyboards.createApplicationDetailsKeyboard(
+                            application.getId(),
+                            chatId // Передаем chatId
+                    );
+                }
+
+
+                botExecutor.editMessageWithHtml(chatId, messageId, text, keyboard);
             }
 
 
-            botExecutor.editMessageWithHtml(chatId, messageId, text, keyboard);
 
 
         } catch (Exception e) {

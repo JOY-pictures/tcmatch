@@ -1,7 +1,6 @@
 package com.tcmatch.tcmatch.service;
 
 import com.tcmatch.tcmatch.bot.BotExecutor;
-import com.tcmatch.tcmatch.bot.keyboards.CommonKeyboards;
 import com.tcmatch.tcmatch.bot.keyboards.NotificationKeyboards;
 import com.tcmatch.tcmatch.events.ApplicationStatusChangedEvent;
 import com.tcmatch.tcmatch.events.NewApplicationEvent;
@@ -12,7 +11,7 @@ import com.tcmatch.tcmatch.model.dto.ApplicationDto;
 import com.tcmatch.tcmatch.model.dto.ProjectDto;
 import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.NotificationStatus;
-import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
+import com.tcmatch.tcmatch.model.enums.SubscriptionTier;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
@@ -58,67 +57,6 @@ public class NotificationService {
         triggerSmartPush(user.getChatId());
     }
 
-    /**
-     * 🔥 ОТПРАВКА УВЕДОМЛЕНИЯ О ПРОЕКТЕ
-     */
-    @Async
-    public void sendProjectNotification(Long freelancerChatId, ProjectDto project) {
-        try {
-            String text = String.format(
-                    "🚀 <b>НОВЫЙ ПРОЕКТ НА ПЛАТФОРМЕ!</b>\n\n" +
-                            "<blockquote>🎯 <b>%s</b>\n" +
-                            "💰 <b>Бюджет:</b> %.0f руб\n" +
-                            "⏱️ <b>Срок:</b> %d дней\n" +
-                            "🛠️ <b>Навыки:</b> %s</blockquote>\n\n" +
-                            "<i>💡 Успейте откликнуться первым!</i>",
-                    escapeHtml(project.getTitle()),
-                    project.getBudget(),
-                    project.getEstimatedDays(),
-                    project.getRequiredSkills() != null ?
-                            escapeHtml(project.getRequiredSkills()) : "не указаны"
-            );
-
-            String callbackData = "project:details:" + project.getId();
-
-            createNotification(freelancerChatId, text, callbackData);
-
-        } catch (Exception e) {
-            log.error("❌ Ошибка отправки уведомления о проекте пользователю {}: {}",
-                    freelancerChatId, e.getMessage());
-        }
-    }
-
-    /**
-     * 🔥 ОТЛОЖЕННОЕ УВЕДОМЛЕНИЕ ДЛЯ БАЗОВОГО ТАРИФА
-     */
-    @Async
-    public void scheduleDelayedNotification(Long freelancerChatId, ProjectDto project, Long delayMinutes) {
-        try {
-            log.info("⏰ Отложенное уведомление для пользователя {} через {} минут",
-                    freelancerChatId, delayMinutes);
-
-            // 🔥 НЕ ИСПОЛЬЗУЕМ Thread.sleep() - вместо этого используем CompletableFuture.delayedExecutor
-            CompletableFuture.delayedExecutor(delayMinutes, TimeUnit.MINUTES)
-                    .execute(() -> {
-                        try {
-                            // 🔥 ПРОСТО ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ - если пользователь перешел на PRO/UNLIMITED,
-
-                            // 🔥 ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ
-                            sendProjectNotification(freelancerChatId, project);
-
-                            log.info("✅ Отложенное уведомление отправлено пользователю {}", freelancerChatId);
-
-                        } catch (Exception e) {
-                            log.error("❌ Ошибка в отложенном уведомлении для пользователя {}: {}",
-                                    freelancerChatId, e.getMessage());
-                        }
-                    });
-
-        } catch (Exception e) {
-            log.error("❌ Ошибка планирования отложенного уведомления для пользователя {}: {}",
-                    freelancerChatId, e.getMessage());
-        }
-    }
     /**
      * 🔥 ЛОГИКА "УМНОГО ПУША" (Удаление старого + Отправка нового)
      */
@@ -230,123 +168,4 @@ public class NotificationService {
 
         return sb.toString();
     }
-
-    /**
-     * 🔥 МЕТОД "НАБЛЮДАТЕЛЯ" (@EventListener)
-     * Он просто преобразует событие в Entity и вызывает createNotification.
-     */
-    @Async
-    @EventListener
-    public void handleApplicationStatusChange(ApplicationStatusChangedEvent event) {
-        try {
-            // ... (логика из прошлого шага)
-            String text;
-            String callbackData = "application:details:" + event.getApplicationDto().getId();
-
-            if (event.getNewStatus() == UserRole.ApplicationStatus.ACCEPTED) {
-                text = String.format("Ваш отклик на проект «%s» был ПРИНЯТ!", event.getApplicationDto().getProject().getTitle());
-            } else if (event.getNewStatus() == UserRole.ApplicationStatus.REJECTED) {
-                text = String.format("Ваш отклик на проект «%s» был ОТКЛОНЕН.", event.getApplicationDto().getProject().getTitle());
-            } else {
-                return;
-            }
-
-            // Сохраняем и вызываем "Умный пуш"
-            createNotification(event.getApplicationDto().getFreelancer().getChatId(), text, callbackData);
-
-        } catch (Exception e) {
-            log.error("❌ Ошибка обработки события отклика: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
-     * 🔥 УВЕДОМЛЕНИЕ ЗАКАЗЧИКУ О НОВОМ ОТКЛИКЕ
-     */
-    @Async
-    @EventListener
-    public void handleNewApplication(NewApplicationEvent event) {
-        try {
-            ApplicationDto application = event.getApplicationDto();
-
-            String text = String.format(
-                    "📨 <b>Новый отклик</b> на проект <i>«%s»</i>\n\n" +
-                            "👤 Исполнитель: %s\n" +
-                            "💰 Предложил: %.0f руб\n" +
-                            "⏱️ Срок: %d дней",
-                    application.getProject().getTitle(),
-                    application.getFreelancer().getDisplayName() != null ?
-                            application.getFreelancer().getDisplayName() : "Аноним",
-                    application.getProposedBudget(),
-                    application.getProposedDays()
-            );
-
-            String callbackData = "application:details:" + application.getId();
-
-            // 🔥 Отправляем уведомление заказчику
-            createNotification(
-                    application.getProject().getCustomerChatId(),
-                    text,
-                    callbackData
-            );
-
-            log.info("✅ Уведомление отправлено заказчику {} о новом отклике",
-                    application.getProject().getCustomerChatId());
-
-        } catch (Exception e) {
-            log.error("❌ Ошибка уведомления заказчика о новом отклике: {}", e.getMessage(), e);
-        }
-    }
-
-    @Async
-    @EventListener
-    public void handleNewProject(NewProjectEvent event) {
-        try {
-            ProjectDto project = event.getProjectDto();
-
-            // 🔥 НЕ УВЕДОМЛЯЕМ СОЗДАТЕЛЯ ПРОЕКТА
-            Long creatorChatId = event.getCreatorChatId();
-
-            // 🔥 ПОЛУЧАЕМ ВСЕХ ФРИЛАНСЕРОВ
-            List<UserDto> allFreelancers = userService.getAllFreelancers();
-
-            for (UserDto freelancer : allFreelancers) {
-                // Пропускаем создателя проекта
-                if (freelancer.getChatId().equals(creatorChatId)) {
-                    continue;
-                }
-
-                // 🔥 ПРОВЕРЯЕМ ТАРИФ ПОЛЬЗОВАТЕЛЯ
-                SubscriptionPlan userPlan = subscriptionService.getUserSubscriptionPlan(freelancer.getChatId());
-
-                if (userPlan.hasInstantNotifications()) {
-                    // 🔥 PRO и UNLIMITED - мгновенно
-                    log.info("🚀 Мгновенное уведомление для {} (тариф: {})",
-                            freelancer.getChatId(), userPlan.name());
-                    sendProjectNotification(freelancer.getChatId(), project);
-                } else {
-                    // 🔥 FREE и BASIC - с задержкой
-                    log.info("⏰ Отложенное уведомление для {} (тариф: {})",
-                            freelancer.getChatId(), userPlan.name());
-                    scheduleDelayedNotification(freelancer.getChatId(), project, 0L);
-                }
-            }
-
-            log.info("✅ Уведомления о новом проекте отправлены {} фрилансерам", allFreelancers.size());
-
-        } catch (Exception e) {
-            log.error("❌ Ошибка уведомления о новом проекте: {}", e.getMessage(), e);
-        }
-    }
-
-
-
-    private String escapeHtml(String text) {
-        if (text == null) return "";
-        return text.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
-    }
-
 }

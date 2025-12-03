@@ -17,7 +17,7 @@ public class RegistrationKeyboard {
     @Lazy
     private final CommonKeyboards commonKeyboards;
 
-    public InlineKeyboardMarkup createRegistrationInProgressKeyboard(UserRole.RegistrationStatus status) {
+    public InlineKeyboardMarkup createRegistrationInProgressKeyboard(UserRole.RegistrationStatus status, Long chatId) {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
@@ -76,7 +76,7 @@ public class RegistrationKeyboard {
                 break;
             case RULES_ACCEPTED:
                 // Если статус RULES_ACCEPTED - возвращаем главное меню
-                return commonKeyboards.createMainMenuKeyboard();
+                return commonKeyboards.createMainMenuKeyboard(chatId);
         }
 
         inlineKeyboard.setKeyboard(rows);

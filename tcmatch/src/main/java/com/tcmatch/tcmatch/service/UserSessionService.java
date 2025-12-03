@@ -1,9 +1,14 @@
 package com.tcmatch.tcmatch.service;
 
+import com.tcmatch.tcmatch.bot.BotExecutor;
 import com.tcmatch.tcmatch.model.UserSession;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
+import com.tcmatch.tcmatch.model.dto.OrderCreationState;
 import com.tcmatch.tcmatch.model.dto.ProjectCreationState;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +20,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 public class UserSessionService {
+
+    @Lazy
+    @Autowired
+    private BotExecutor botExecutor;
 
     private final Map<Long, UserSession> userSessions = new ConcurrentHashMap<>();
 
@@ -71,13 +80,13 @@ public class UserSessionService {
         log.debug("🧹 Cleared state for user: {}", chatId);
     }
 
-    public void clearHandlerState(Long chatId, String handler) {
+    public void clearCommandState(Long chatId, String command) {
         UserSession session = getSession(chatId);
-        if (handler.equals(session.getCurrentCommand())) {
+        if (command.equals(session.getCurrentCommand())) {
             session.setCurrentCommand(null);
             session.setCurrentAction(null);
             session.clearContext();
-            log.debug("🧹 Cleared {} state for user: {}", handler, chatId);
+            log.debug("🧹 Cleared {} state for user: {}", command, chatId);
         }
     }
 
@@ -313,6 +322,17 @@ public class UserSessionService {
         return new ConcurrentHashMap<>(userSessions);
     }
 
+    /**
+     * 🔥 Очистить все сессии (вызывать при shutdown)
+     */
+    public void clearAllSessions() {
+        synchronized (userSessions) {
+            int size = userSessions.size();
+            userSessions.clear();
+            log.info("🧹 Очищены все сессии пользователей: {}", size);
+        }
+    }
+
     public Deque<String> getUserHistory(Long chatId) {
         UserSession session = getSession(chatId);
         return session.getNavigationHistory();
@@ -358,5 +378,139 @@ public class UserSessionService {
     public void setLastPushMessageId(Long chatId, Integer messageId) {
         UserSession session = getSession(chatId);
         session.setLastPushMessageId(messageId);
+    }
+
+    public void setOrderCreationState(Long chatId, OrderCreationState state) {
+        UserSession session = getSession(chatId);
+        session.setOrderCreationState(state);
+    }
+
+    public OrderCreationState getOrderCreationState(Long chatId) {
+        UserSession session = getSession(chatId);
+        return session.getOrderCreationState();
+    }
+
+    public void clearOrderCreationState(Long chatId) {
+        UserSession session = getSession(chatId);
+        session.setOrderCreationState(null);
+    }
+
+    public void clearCurrentCommand(Long chatId) {
+        // 1. Получаем объект сессии (предполагаем, что есть такой метод)
+        UserSession session = getSession(chatId);
+
+        if (session != null && session.getCurrentCommand() != null) {
+            // 2. Устанавливаем команду в null (или пустую строку, в зависимости от реализации)
+            session.setCurrentCommand(null);
+
+            log.info("✅ Cleared current command for user {}", chatId);
+        }
+    }
+
+    // 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ПЛАТЕЖНЫХ СООБЩЕНИЙ
+
+    /**
+     * Добавить платежное сообщение
+     */
+    public void addPaymentMessage(Long chatId, String paymentId, Integer messageId) {
+        UserSession session = getSessionAndUpdateActivity(chatId);
+        session.addPaymentMessage(paymentId, messageId);
+        log.info("💳 Добавлено платежное сообщение: chatId={}, paymentId={}, messageId={}",
+                chatId, paymentId, messageId);
+    }
+
+    /**
+     * Найти платежное сообщение по paymentId
+     */
+    public Optional<UserSession.PaymentMessageInfo> findPaymentMessage(Long chatId, String paymentId) {
+        UserSession session = getSession(chatId);
+        return session.findPaymentMessage(paymentId);
+    }
+
+    /**
+     * Удалить платежное сообщение
+     */
+    public void removePaymentMessage(Long chatId, String paymentId) {
+        UserSession session = getSession(chatId);
+        session.removePaymentMessage(paymentId);
+        log.info("🗑️ Удалено платежное сообщение: chatId={}, paymentId={}", chatId, paymentId);
+    }
+
+    /**
+     * Получить все платежные сообщения пользователя
+     */
+    public List<UserSession.PaymentMessageInfo> getPaymentMessages(Long chatId) {
+        UserSession session = getSession(chatId);
+        return session.getActivePaymentMessages();
+    }
+
+    /**
+     * Получить все ID платежных сообщений для удаления
+     */
+    public List<Integer> getPaymentMessageIds(Long chatId) {
+        UserSession session = getSession(chatId);
+        return session.getPaymentMessageIds();
+    }
+
+    /**
+     * Очистить все платежные сообщения пользователя
+     */
+    public void clearPaymentMessages(Long chatId) {
+        UserSession session = getSession(chatId);
+        List<UserSession.PaymentMessageInfo> messages = session.getActivePaymentMessages();
+
+        if (!messages.isEmpty()) {
+            log.info("🧹 Очистка {} платежных сообщений для chatId={}",
+                    messages.size(), chatId);
+            session.clearPaymentMessages();
+        }
+    }
+
+    /**
+     * Удалить истекшие платежные сообщения
+     */
+    public void cleanupExpiredPaymentMessages(Long chatId) {
+        UserSession session = getSession(chatId);
+        List<UserSession.PaymentMessageInfo> messages = session.getActivePaymentMessages();
+
+        int expiredCount = 0;
+        for (UserSession.PaymentMessageInfo message : messages) {
+            if (message.isExpired()) {
+                session.removePaymentMessage(message.getPaymentId());
+                botExecutor.deleteMessage(chatId, message.getMessageId());
+                expiredCount++;
+                log.debug("⏰ Удалено истекшее платежное сообщение: paymentId={}",
+                        message.getPaymentId());
+            }
+        }
+
+        if (expiredCount > 0) {
+            log.info("🧹 Удалено {} истекших платежных сообщений для chatId={}",
+                    expiredCount, chatId);
+        }
+    }
+
+    /**
+     * Проверить и очистить истекшие сообщения для всех пользователей
+     */
+    @Scheduled(fixedRate = 300000) // Каждые 5 минут
+    public void cleanupAllExpiredPaymentMessages() {
+        synchronized (userSessions) {
+            int totalCleaned = 0;
+            for (Long chatId : userSessions.keySet()) {
+                try {
+                    cleanupExpiredPaymentMessages(chatId);
+                    totalCleaned++;
+                } catch (Exception e) {
+                    log.warn("Ошибка очистки платежных сообщений для {}: {}",
+                            chatId, e.getMessage());
+                }
+            }
+
+//            if (totalCleaned > 0) {
+//                log.info("✅ Очищены истекшие платежные сообщения для {} пользователей",
+//                        totalCleaned);
+//            }
+        }
     }
 }

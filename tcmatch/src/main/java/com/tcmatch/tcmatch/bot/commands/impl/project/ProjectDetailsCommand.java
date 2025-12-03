@@ -3,17 +3,18 @@ package com.tcmatch.tcmatch.bot.commands.impl.project;
 import com.tcmatch.tcmatch.bot.BotExecutor;
 import com.tcmatch.tcmatch.bot.commands.Command;
 import com.tcmatch.tcmatch.bot.commands.CommandContext;
+import com.tcmatch.tcmatch.bot.commands.impl.order.OrderDetailsCommand;
 import com.tcmatch.tcmatch.bot.keyboards.CommonKeyboards;
 import com.tcmatch.tcmatch.bot.keyboards.ProjectKeyboards;
+import com.tcmatch.tcmatch.model.Order;
 import com.tcmatch.tcmatch.model.dto.ProjectDto;
-import com.tcmatch.tcmatch.service.ApplicationService;
-import com.tcmatch.tcmatch.service.ProjectService;
-import com.tcmatch.tcmatch.service.ProjectViewService;
-import com.tcmatch.tcmatch.service.RoleBasedMenuService;
+import com.tcmatch.tcmatch.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+
+import java.util.Optional;
 
 @Component
 @Slf4j
@@ -27,6 +28,8 @@ public class ProjectDetailsCommand implements Command {
     private final RoleBasedMenuService roleBasedMenuService;
     private final CommonKeyboards commonKeyboards;
     private final ProjectKeyboards projectKeyboards;
+    private final OrderService orderService;
+    private final OrderDetailsCommand orderDetailsCommand;
 
     @Override
     public boolean canHandle(String actionType, String action) {
@@ -39,6 +42,7 @@ public class ProjectDetailsCommand implements Command {
         try {
             Long projectId;
             String parameter = context.getParameter();
+
 
             // 🔥 ПРОВЕРЯЕМ - ПЕРЕДАН ID ПРОЕКТА ИЛИ ID ОТКЛИКА?
             if (parameter.startsWith("app_")) {
@@ -55,20 +59,58 @@ public class ProjectDetailsCommand implements Command {
 
             botExecutor.deletePreviousMessages(chatId);
 
-            // 🔥 РЕГИСТРИРУЕМ ПРОСМОТР ТОЛЬКО ЗДЕСЬ - КОГДА ПОЛЬЗОВАТЕЛЬ ДЕЙСТВИТЕЛЬНО СМОТРИТ ПРОЕКТ
-            projectViewService.registerProjectView(chatId, projectId);
 
-            String projectText = formatProjectDetails(project);
 
-            boolean canApply = roleBasedMenuService.canUserApplyToProjects(chatId) &&
-                    !roleBasedMenuService.isProjectOwner(chatId, project.getCustomerChatId());
+            if (!project.getCustomerChatId().equals(chatId)) {
+                // 🔥 РЕГИСТРИРУЕМ ПРОСМОТР ТОЛЬКО ЗДЕСЬ - КОГДА ПОЛЬЗОВАТЕЛЬ ДЕЙСТВИТЕЛЬНО СМОТРИТ ПРОЕКТ
+                projectViewService.registerProjectView(chatId, projectId);
 
-            InlineKeyboardMarkup keyboard = projectKeyboards.createProjectDetailsKeyboard(
-                    chatId, projectId, canApply);
+                String projectText = formatProjectDetails(project);
 
-            Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);
+                boolean canApply = roleBasedMenuService.canUserApplyToProjects(chatId) &&
+                        !roleBasedMenuService.isProjectOwner(chatId, project.getCustomerChatId());
 
-            botExecutor.editMessageWithHtml(chatId, mainMessageId, projectText, keyboard);
+                InlineKeyboardMarkup keyboard = projectKeyboards.createProjectDetailsKeyboard(
+                        chatId, projectId, canApply);
+
+                Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);
+
+                botExecutor.editMessageWithHtml(chatId, mainMessageId, projectText, keyboard);
+                return;
+            }
+
+            // 2. 🔥 ГЕНИАЛЬНАЯ ЛОГИКА: Проверяем, есть ли по проекту АКТИВНЫЙ ЗАКАЗ
+            Optional<Order> activeOrder = orderService.findActiveOrderByProjectId(projectId);
+
+            if (activeOrder.isPresent()) {
+                // 3. 🔥 ПЕРЕНАПРАВЛЕНИЕ: Если заказ есть, показываем ДЕТАЛИ ЗАКАЗА
+                log.info("Project {} has active order. Redirecting Customer {} to OrderDetailsCommand.", projectId, chatId);
+
+                // Передаем ID Заказа в OrderDetailsCommand
+                context.setParameter(activeOrder.get().getId().toString());
+                orderDetailsCommand.execute(context);
+
+            } else {
+                // 4. СТАНДАРТНАЯ ЛОГИКА: Если заказа нет, показываем детали ПРОЕКТА
+                log.info("Project {} has no active order. Showing Project details.", projectId);
+
+                // 🔥 РЕГИСТРИРУЕМ ПРОСМОТР ТОЛЬКО ЗДЕСЬ - КОГДА ПОЛЬЗОВАТЕЛЬ ДЕЙСТВИТЕЛЬНО СМОТРИТ ПРОЕКТ
+                projectViewService.registerProjectView(chatId, projectId);
+
+                String projectText = formatProjectDetails(project);
+
+                boolean canApply = roleBasedMenuService.canUserApplyToProjects(chatId) &&
+                        !roleBasedMenuService.isProjectOwner(chatId, project.getCustomerChatId());
+
+                InlineKeyboardMarkup keyboard = projectKeyboards.createProjectDetailsKeyboard(
+                        chatId, projectId, canApply);
+
+                Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);
+
+                botExecutor.editMessageWithHtml(chatId, mainMessageId, projectText, keyboard);
+                return;
+            }
+
 
 
         } catch (Exception e) {

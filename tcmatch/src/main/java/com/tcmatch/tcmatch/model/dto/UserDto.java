@@ -1,6 +1,5 @@
 package com.tcmatch.tcmatch.model.dto;
 
-import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -50,7 +49,6 @@ public class UserDto {
     private LocalDateTime reviewUntil;
 
     // 🔥 ПОЛЕ ПОДПИСКИ
-    private SubscriptionPlan subscriptionPlan;
     private LocalDateTime subscriptionExpiresAt;
 
     public static UserDto fromEntity(com.tcmatch.tcmatch.model.User entity) {
@@ -88,17 +86,9 @@ public class UserDto {
         dto.setReviewUntil(entity.getReviewUntil());
 
         // 🔥 ДОБАВЛЯЕМ ПОДПИСКУ
-        dto.setSubscriptionPlan(entity.getSubscriptionPlan());
         dto.setSubscriptionExpiresAt(entity.getSubscriptionExpiresAt());
 
         return dto;
-    }
-
-    // 🔥 ДОБАВЛЯЕМ МЕТОД ДЛЯ ПРОВЕРКИ ПРЕМИУМА
-    public boolean isPremium() {
-        return subscriptionPlan != null &&
-                subscriptionPlan != SubscriptionPlan.FREE &&
-                subscriptionPlan != SubscriptionPlan.BASIC;
     }
 
     public boolean hasActiveSubscription() {

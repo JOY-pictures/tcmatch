@@ -5,12 +5,12 @@ import com.tcmatch.tcmatch.bot.commands.Command;
 import com.tcmatch.tcmatch.bot.commands.CommandContext;
 import com.tcmatch.tcmatch.bot.keyboards.ApplicationKeyboards;
 import com.tcmatch.tcmatch.bot.keyboards.CommonKeyboards;
+import com.tcmatch.tcmatch.bot.keyboards.SubscriptionKeyboards;
+import com.tcmatch.tcmatch.model.Subscription;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
 import com.tcmatch.tcmatch.model.dto.ProjectDto;
-import com.tcmatch.tcmatch.service.ApplicationCreationService;
-import com.tcmatch.tcmatch.service.ApplicationService;
-import com.tcmatch.tcmatch.service.ProjectService;
-import com.tcmatch.tcmatch.service.UserSessionService;
+import com.tcmatch.tcmatch.model.dto.UserDto;
+import com.tcmatch.tcmatch.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,6 +26,9 @@ public class CreateApplicationCommand implements Command {
     private final ApplicationService applicationService;
     private final ProjectService projectService;
     private final CommonKeyboards commonKeyboards;
+    private final SubscriptionService subscriptionService;
+    private final UserService userService;
+    private final SubscriptionKeyboards subscriptionKeyboards;
     private final ApplicationKeyboards applicationKeyboards;    private final UserSessionService userSessionService;
 
     @Override
@@ -40,6 +43,23 @@ public class CreateApplicationCommand implements Command {
             ProjectDto project = projectService.getProjectDtoById(projectId)
                     .orElseThrow(() -> new RuntimeException("Проект не найден"));
             Integer mainMessageId = botExecutor.getOrCreateMainMessageId(context.getChatId());
+
+            if (!subscriptionService.hasSufficientApplications(context.getChatId())) {
+                log.warn("User {} has no available applications.", context.getChatId());
+                String errorText = "<b>❌ Лимит откликов исчерпан!</b>\n\n" +
+                        "У вас закончились доступные отклики. Пожалуйста, приобретите подписку, чтобы продолжить работу.";
+
+                // TODO: Замени на свою клавиатуру для покупки
+                InlineKeyboardMarkup subscriptionKeyboard = subscriptionKeyboards.createSubscriptionKeyboard();
+
+                botExecutor.editMessageWithHtml(
+                        context.getChatId(),
+                        mainMessageId != null ? mainMessageId : context.getMessageId(),
+                        errorText,
+                        subscriptionKeyboard
+                );
+                return; // Прерываем выполнение
+            }
 
             // 🔥 УДАЛЯЕМ ВСЕ СООБЩЕНИЯ С ПРОЕКТАМИ И ПАГИНАЦИЕЙ (используем метод из BaseHandler)
             botExecutor.deletePreviousMessages(context.getChatId());
@@ -85,7 +105,11 @@ public class CreateApplicationCommand implements Command {
             keyboard = applicationKeyboards.createApplicationEditKeyboard(state.getCurrentStep().name().toLowerCase(), state.getProjectId());
         } else if (state.getCurrentStep() == ApplicationCreationState.ApplicationCreationStep.CONFIRMATION) {
             // 🔥 ЭКРАН ПОДТВЕРЖДЕНИЯ - ВОЗМОЖНОСТЬ РЕДАКТИРОВАТЬ ВСЕ ПОЛЯ
-            text = formatHtmlApplicationConfirmation(state, project);
+            UserDto user = userService.getUserDtoByChatId(chatId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+            Subscription sub = subscriptionService.getSubscription(user.getId());
+            int remainingApplications = sub.getAvailableApplications();
+
+            text = formatHtmlApplicationConfirmation(state, project, remainingApplications);
             keyboard = applicationKeyboards.createApplicationConfirmationKeyboard(state.getProjectId());
         } else {
             // 🔥 ПРОЦЕСС ЗАПОЛНЕНИЯ - ТОЛЬКО ОТМЕНА
@@ -232,7 +256,18 @@ public class CreateApplicationCommand implements Command {
         }
     }
 
-    private String formatHtmlApplicationConfirmation(ApplicationCreationState state, ProjectDto project) {
+    private String formatHtmlApplicationConfirmation(ApplicationCreationState state, ProjectDto project, int remaining) {
+        // 🔥 Логика отображения остатка
+        String limitText;
+        if (remaining == Integer.MAX_VALUE) {
+            limitText = "<b>✅ Лимит:</b> <i>Безлимитно (PRO)</i>";
+        } else if (remaining <= 1) {
+            limitText = "<b>🚨 Внимание:</b> Это ваш <b>ПОСЛЕДНИЙ</b> отклик!";
+        } else {
+            // (remaining - 1) потому что этот отклик еще не потрачен
+            limitText = String.format("<b>⚠️ Внимание:</b> Будет использован 1 отклик. Останется: <code>%d</code>", remaining - 1);
+        }
+
         return """
             <b>✅ ПОДТВЕРЖДЕНИЕ ОТКЛИКА</b>
         
@@ -247,14 +282,15 @@ public class CreateApplicationCommand implements Command {
         <b>💡 Проверьте информацию перед отправкой</b>
         <b>🛡️ После отправки изменить отклик будет нельзя</b>
         
-        <b>⚠️ Внимание:</b> Использован 1 отклик из вашего лимита
-        """.formatted(
-                escapeHtml(project.getTitle()),
-                project.getCustomerUserName() != null ?
-                        escapeHtml(project.getCustomerUserName()) : "скрыт",
-                escapeHtml(state.getCoverLetter()),
-                state.getProposedBudget(),
-                state.getProposedDays()
+        %s
+        """.formatted( //
+                escapeHtml(project.getTitle()), //
+                project.getCustomerUserName() != null ? //
+                        escapeHtml(project.getCustomerUserName()) : "скрыт", //
+                escapeHtml(state.getCoverLetter()), //
+                state.getProposedBudget(), //
+                state.getProposedDays(), //
+                limitText // 🔥 Наш новый текст
         );
     }
 

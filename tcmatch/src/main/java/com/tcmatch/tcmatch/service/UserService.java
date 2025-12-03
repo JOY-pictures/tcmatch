@@ -3,11 +3,12 @@ package com.tcmatch.tcmatch.service;
 import com.tcmatch.tcmatch.model.Project;
 import com.tcmatch.tcmatch.model.User;
 import com.tcmatch.tcmatch.model.dto.UserDto;
-import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +25,12 @@ public class UserService {
     private OrderService orderService;
     private ApplicationService applicationService;
     private ReputationService reputationService;
-    private final UserRepository userRepository;
+
+    private final  UserRepository userRepository;
+
+    @Lazy
+    @Autowired
+    private SubscriptionService subscriptionService;
 
     @Transactional
     public User registerFromTelegram(Long chatId, String username, String firstName, String lastName) {
@@ -56,8 +62,14 @@ public class UserService {
                 .registeredAt(LocalDateTime.now())
                 .lastActivityAt(LocalDateTime.now())
                 .build();
+
         User savedUser = userRepository.save(user);
         log.info("✅ Создан пользователь: {}", savedUser);
+
+        // 🔥 КРИТИЧЕСКИ ВАЖНЫЙ ШАГ: ИНИЦИАЛИЗАЦИЯ БЕСПЛАТНОЙ ПОДПИСКИ
+        // Используем ID, который был сгенерирован при сохранении (savedUser.getId())
+        subscriptionService.initializeNewUserSubscription(savedUser.getId());
+
         return savedUser;
     }
 
@@ -93,7 +105,7 @@ public class UserService {
 
             if (orderService != null) {
                 try {
-                    activeOrders = orderService.getActiveOrderCount(chatId);
+//                    activeOrders = orderService.getActiveOrderCount(chatId);
                 } catch (Exception e) {
                     log.warn("⚠️ Не удалось получить заказы пользователя {}: {}", chatId, e.getMessage());
                 }

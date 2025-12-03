@@ -49,7 +49,7 @@ public class ApplicationCreationService {
     public void cancelCreation(Long chatId) {
         // 🔥 ОЧИЩАЕМ СОСТОЯНИЕ В USERSESSIONSERVICE
         userSessionService.clearApplicationCreationState(chatId);
-        userSessionService.clearHandlerState(chatId, "application");
+        userSessionService.clearCurrentCommand(chatId);
         log.info("❌ Cancelled application creation for user: {}", chatId);
     }
 

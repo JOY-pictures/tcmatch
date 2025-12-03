@@ -88,4 +88,5 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpec
             "LOWER(p.requiredSkills) LIKE LOWER(CONCAT('%', :skill, '%')))")
     List<Project> findByRequiredSkillsContaining(@Param("requiredSkills") String skill);
 
+    List<Project> findByIdIn(List<Long> ids);
 }

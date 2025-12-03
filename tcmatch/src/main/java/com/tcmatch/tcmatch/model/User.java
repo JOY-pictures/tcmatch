@@ -1,6 +1,5 @@
 package com.tcmatch.tcmatch.model;
 
-import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -88,11 +87,6 @@ public class User {
 
     @Builder.Default
     private List<Long> favoriteProjects = new ArrayList<>();
-
-    // 🔥 ПОЛЕ ПОДПИСКИ
-    @Enumerated(EnumType.STRING)
-    @Builder.Default
-    private SubscriptionPlan subscriptionPlan = SubscriptionPlan.FREE;
 
     private LocalDateTime subscriptionExpiresAt;
 

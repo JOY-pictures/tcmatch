@@ -52,7 +52,7 @@ public class StartCommand implements TextCommand {
                     log.info("🔄 Пользователь {} возвращается, очищаем сессию...", chatId);
                     userSessionService.resetToMain(chatId);
                     String menuText = textMessageService.getMainMenuText();
-                    botExecutor.editMessageWithHtml(chatId, messageId, menuText, commonKeyboards.createMainMenuKeyboard());
+                    botExecutor.editMessageWithHtml(chatId, messageId, menuText, commonKeyboards.createMainMenuKeyboard(chatId));
                     return;
                 }
             }

@@ -36,13 +36,13 @@ public class ProjectCreationService {
 
     public void cancelCreation(Long chatId) {
         userSessionService.clearProjectCreationState(chatId);
-        userSessionService.clearHandlerState(chatId, "project");
+        userSessionService.clearCurrentCommand(chatId);
         log.info("❌ Cancelled project creation for user: {}", chatId);
     }
 
     public void completeCreation(Long chatId) {
         userSessionService.clearProjectCreationState(chatId);
-        userSessionService.clearHandlerState(chatId, "project_creation");
+        userSessionService.clearCurrentCommand(chatId);
         log.info("✅ Completed project creation for user: {}", chatId);
     }
 

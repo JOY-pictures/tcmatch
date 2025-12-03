@@ -22,15 +22,13 @@ public class CommandDispatcher {
     private final NavigationService navigationService;
 
     public void handleCallback(Long chatId, String callbackData, Integer messageId, String userName) {
+        System.out.println(callbackData);
         String[] parts = callbackData.split(":");
         String actionType = parts[0];
         String action = parts[1];
         // 🔥 ПРОСТО БЕРЕМ ВСЕ ОСТАВШИЕСЯ ЧАСТИ КАК ПАРАМЕТР
         String parameter = parts.length > 2 ?
                 String.join(":", Arrays.copyOfRange(parts, 2, parts.length)) : null;
-
-        // 🔥 СОХРАНЕНИЕ ИСТОРИИ НАВИГАЦИИ
-        navigationService.saveToNavigationHistory(chatId, actionType, action, parameter);
 
         log.info("🔄 Command: {}:{}:{} (user: {}, chat: {})",
                 actionType, action, parameter, userName, chatId);
@@ -42,6 +40,8 @@ public class CommandDispatcher {
             if (command.canHandle(actionType, action)) {
                 log.info("✅ Executing: {}", command.getClass().getSimpleName());
                 command.execute(context);
+                // 🔥 СОХРАНЕНИЕ ИСТОРИИ НАВИГАЦИИ
+                navigationService.saveToNavigationHistory(chatId, actionType, action, parameter);
                 return;
             }
         }

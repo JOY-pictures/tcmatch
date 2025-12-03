@@ -48,6 +48,8 @@ public class ShowNotificationCenterCommand implements Command {
             // 1. 🔥 Очищаем ID ПУШ-СООБЩЕНИЯ и удаляем его из чата
             notificationService.clearPushMessageAndSession(chatId);
 
+            userSessionService.removeScreensOfType(chatId, "subscription");
+
             // 2. Получаем все ID уведомлений
             // (Вам нужно добавить в NotificationRepository метод findIdByUserIdOrderByCreatedAtDesc)
             List<Long> allNotificationIds = notificationService.getAllNotificationIds(chatId);

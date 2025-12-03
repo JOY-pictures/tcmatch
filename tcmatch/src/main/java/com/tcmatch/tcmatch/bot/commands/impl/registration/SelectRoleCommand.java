@@ -62,7 +62,8 @@ public class SelectRoleCommand implements Command {
                 """.formatted(getRoleDisplay(userRole));
 
             InlineKeyboardMarkup keyboard = registrationKeyboard.createRegistrationInProgressKeyboard(
-                    UserRole.RegistrationStatus.ROLE_SELECTED
+                    UserRole.RegistrationStatus.ROLE_SELECTED,
+                    chatId
             );
 
             Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);

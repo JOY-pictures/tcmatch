@@ -8,7 +8,7 @@ import com.tcmatch.tcmatch.bot.keyboards.CommonKeyboards;
 import com.tcmatch.tcmatch.bot.keyboards.SubscriptionKeyboards;
 import com.tcmatch.tcmatch.model.Application;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
-import com.tcmatch.tcmatch.model.enums.SubscriptionPlan;
+import com.tcmatch.tcmatch.model.enums.SubscriptionTier;
 import com.tcmatch.tcmatch.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,21 +50,26 @@ public class ConfirmApplicationCommand implements Command {
                 return;
             }
 
-            // 🔥 РЕАЛЬНАЯ ПРОВЕРКА ПОДПИСКИ И ЛИМИТОВ
-            SubscriptionService.SubscriptionCheckResult subscriptionCheck =
-                    subscriptionService.checkApplicationLimits(chatId);
+            // 🔥 ==========================================================
+            // 🔥 ШАГ 1: ПРОВЕРКА ЛИМИТОВ
+            // 🔥 ==========================================================
+            if (!subscriptionService.hasSufficientApplications(chatId)) {
 
-            if (!subscriptionCheck.canApply) {
-                String warningText = createSubscriptionWarningText(subscriptionCheck);
+                SubscriptionService.SubscriptionStatsDto currentStats = subscriptionService.getSubscriptionStats(chatId);
+                String warningText = createSubscriptionWarningText(currentStats);
+
                 botExecutor.editMessageWithHtml(chatId, messageId, warningText,
                         subscriptionKeyboards.createSubscriptionKeyboard());
                 return;
             }
 
-            // 🔥 ИСПОЛЬЗУЕМ ОТКЛИК (уменьшаем лимит)
+            // 🔥 ШАГ 2: ИСПОЛЬЗУЕМ ОТКЛИК (уменьшаем лимит)
+            // Мы заменили логику checkApplicationLimits и useApplication на наши методы
             boolean applicationUsed = subscriptionService.useApplication(chatId);
+
             if (!applicationUsed) {
-                botExecutor.sendTemporaryErrorMessage(chatId, "❌ Не удалось использовать отклик", 5);
+                // Если useApplication вернул false, значит decrementApplicationCount провалился (IllegalStateException)
+                botExecutor.sendTemporaryErrorMessage(chatId, "❌ Не удалось использовать отклик. Повторите попытку.", 5);
                 return;
             }
 
@@ -79,12 +84,16 @@ public class ConfirmApplicationCommand implements Command {
 
             applicationCreationService.completeCreation(chatId);
 
-            // 🔥 ОБНОВЛЯЕМ СТАТИСТИКУ ДЛЯ СООБЩЕНИЯ УСПЕХА
-            SubscriptionService.SubscriptionCheckResult updatedStats =
-                    subscriptionService.checkApplicationLimits(chatId);
+            // 🔥 ШАГ 4: ОБНОВЛЯЕМ СТАТИСТИКУ ДЛЯ СООБЩЕНИЯ УСПЕХА
+            SubscriptionService.SubscriptionStatsDto updatedStats = subscriptionService.getSubscriptionStats(chatId);
 
             // 🔥 ПОЛУЧАЕМ ДАННЫЕ ПРОЕКТА ЧЕРЕЗ СЕРВИС
             String projectTitle = projectService.getProjectTitleById(state.getProjectId());
+
+            // 🔥 ФОРМИРУЕМ СООБЩЕНИЕ УСПЕХА
+            String limitDisplay = updatedStats.getMonthlyLimit() == -1
+                    ? "Безлимитно"
+                    : String.format("<code>%d/%d</code>", updatedStats.getRemainingApplications(), updatedStats.getMonthlyLimit());
 
             String successText = """
                     <b>✅ ОТКЛИК ОТПРАВЛЕН!</b>
@@ -96,16 +105,17 @@ public class ConfirmApplicationCommand implements Command {
                     <b>📨 Статус:</b> отправлен заказчику
                     <b>⏳ Ожидание:</b> ответа от заказчика </blockquote>
                 
-                    <b>📊 Осталось откликов в этом месяце:</b> <code>%d/%d</code>
+                    <b>📊 Осталось откликов в этом месяце:</b> %s
+                    <b>💡 Тариф:</b> <i>%s</i>
                 
                     <i>💡 Лимит обновится %s</i>
                     """.formatted(
                     escapeHtml(projectTitle),
                     application.getProposedBudget(),
                     application.getProposedDays(),
-                    updatedStats.remainingApplications,
-                    updatedStats.currentPlan.getMonthlyApplicationsLimit(),
-                    formatNextResetDate()
+                    limitDisplay,
+                    updatedStats.getTier().getDisplayName(), // Добавляем название тарифа
+                    updatedStats.formatResetDate()
             );
 
             userSessionService.clearNavigationHistory(chatId);
@@ -136,37 +146,45 @@ public class ConfirmApplicationCommand implements Command {
     }
 
     // 🔥 ТЕКСТ ПРЕДУПРЕЖДЕНИЯ О ЛИМИТАХ
-    private String createSubscriptionWarningText(SubscriptionService.SubscriptionCheckResult check) {
-        return """
-        ⚠️<b> **ЛИМИТ ОТКЛИКОВ ИСЧЕРПАН**</b>
-        
-        📊 <b>Ваш текущий тариф: *%s*</b>
-        🚫 Использовано откликов: *%d/%d*
-        
-        <b>💎 *Что делать:*</b>
-        • Приобрести подписку <b>TCMatch Pro</b>
-        • <i>Дождаться обновления лимита (1 числа)
-        • Использовать отклики экономнее</i>
-        
-        🛒 <b>*Доступные тарифы:*</b>
-        •<i> %s - %s
-        • %s - %s
-        • %s - %s</i>
-        
-        <b>💡 *Подписка открывает:*
-        • Больше откликов в месяц
-        • Приоритет в поиске
-        • Расширенную статистику</b>
-        """.formatted(
-                check.currentPlan.getDisplayName(),
-                check.currentPlan.getMonthlyApplicationsLimit() - check.remainingApplications,
-                check.currentPlan.getMonthlyApplicationsLimit(),
-                SubscriptionPlan.BASIC.getDisplayName(),
-                SubscriptionPlan.BASIC.getPriceDisplay(),
-                SubscriptionPlan.PRO.getDisplayName(),
-                SubscriptionPlan.PRO.getPriceDisplay(),
-                SubscriptionPlan.UNLIMITED.getDisplayName(),
-                SubscriptionPlan.UNLIMITED.getPriceDisplay()
-        );
+        private String createSubscriptionWarningText(SubscriptionService.SubscriptionStatsDto check) {
+
+            // Получаем тарифы для вывода
+            SubscriptionTier basic = SubscriptionTier.BASIC;
+            SubscriptionTier pro = SubscriptionTier.PRO;
+            SubscriptionTier unlimited = SubscriptionTier.UNLIMITED;
+
+            String usedCount = check.getMonthlyLimit() == -1
+                    ? "не ограничено"
+                    : String.valueOf(check.getMonthlyLimit() - check.getRemainingApplications());
+
+            return """
+            ⚠️<b> **ЛИМИТ ОТКЛИКОВ ИСЧЕРПАН**</b>
+            
+            📊 <b>Ваш текущий тариф: *%s*</b>
+            🚫 Использовано откликов: *%s/%s*
+            
+            <b>💎 *Что делать:*</b>
+            • Приобрести подписку <b>TCMatch Pro</b>
+            • <i>Дождаться обновления лимита (%s)</i>
+            
+            🛒 <b>*Доступные тарифы:*</b>
+            • <b>%s</b>: %d откликов | <code>%.0f руб</code>
+            • <b>%s</b>: %d откликов + приоритет | <code>%.0f руб</code>
+            • <b>%s</b>: Безлимитно + приоритет | <code>%.0f руб</code>
+            
+            <b>💡 *Подписка открывает:*
+            • Больше откликов в месяц
+            • Приоритет в поиске (PRO/UNL)
+            • Мгновенные уведомления (PRO/UNL)</b>
+            """.formatted(
+                    check.getTier().getDisplayName(),
+                    usedCount,
+                    check.getMonthlyLimit() == -1 ? "∞" : String.valueOf(check.getMonthlyLimit()),
+                    check.formatResetDate(),
+
+                    basic.getDisplayName(), basic.getMonthlyApplicationLimit(), basic.getPrice(),
+                    pro.getDisplayName(), pro.getMonthlyApplicationLimit(), pro.getPrice(),
+                    unlimited.getDisplayName(), 0, unlimited.getPrice() // 0 для UNL выглядит лучше, чем Integer.MAX_VALUE
+            );
     }
 }

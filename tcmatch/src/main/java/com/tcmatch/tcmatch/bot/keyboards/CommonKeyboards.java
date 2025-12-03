@@ -1,6 +1,7 @@
 package com.tcmatch.tcmatch.bot.keyboards;
 
 import com.tcmatch.tcmatch.model.dto.PaginationContext;
+import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.service.UserService;
 import com.tcmatch.tcmatch.util.PaginationContextKeys;
@@ -26,13 +27,13 @@ public class CommonKeyboards {
             return createUnauthorizedUserKeyboard();
         } else if (!userService.hasFullAccess(chatId)) {
             UserRole.RegistrationStatus status = userService.getRegistrationStatus(chatId);
-            return createRegistrationInProgressKeyboard(status);
+            return createRegistrationInProgressKeyboard(status, chatId);
         } else {
             return createToMainMenuKeyboard();
         }
     }
 
-    public InlineKeyboardMarkup createRegistrationInProgressKeyboard(UserRole.RegistrationStatus status) {
+    public InlineKeyboardMarkup createRegistrationInProgressKeyboard(UserRole.RegistrationStatus status, Long chatId) {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
@@ -91,7 +92,7 @@ public class CommonKeyboards {
                 break;
             case RULES_ACCEPTED:
                 // Если статус RULES_ACCEPTED - возвращаем главное меню
-                return createMainMenuKeyboard();
+                return createMainMenuKeyboard(chatId);
         }
 
         inlineKeyboard.setKeyboard(rows);
@@ -213,7 +214,7 @@ public class CommonKeyboards {
         };
     }
 
-    public InlineKeyboardMarkup createMainMenuKeyboard() {
+    public InlineKeyboardMarkup createMainMenuKeyboard(Long chatId) {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
@@ -239,8 +240,19 @@ public class CommonKeyboards {
                 .callbackData("help:menu")
                 .build());
 
+        UserDto user = userService.getUserDtoByChatId(chatId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
         rows.add(row1);
         rows.add(row2);
+
+        if (user.getRole().equals(UserRole.FREELANCER)) {
+            List<InlineKeyboardButton> row3 = new ArrayList<>();
+            row3.add(InlineKeyboardButton.builder()
+                    .text("💰 Тарифы")
+                    .callbackData("subscription:show_menu") // 🔥 Новая команда!
+                    .build());
+            rows.add(row3);
+        }
 
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;

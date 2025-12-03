@@ -343,7 +343,7 @@ public class ProjectKeyboards {
         List<InlineKeyboardButton> row1 = new ArrayList<>();
         row1.add(InlineKeyboardButton.builder()
                 .text("⚙️ Выполняемые")
-                .callbackData("project:active")
+                .callbackData("application:accepted")
                 .build());
         row1.add(InlineKeyboardButton.builder()
                 .text("⭐ Избранное")

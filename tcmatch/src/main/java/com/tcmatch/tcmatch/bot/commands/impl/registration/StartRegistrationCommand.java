@@ -44,7 +44,7 @@ public class StartRegistrationCommand implements Command {
             
             Вы уже зарегистрированы в системе.
             """;
-            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard();
+            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard(context.getChatId());
             botExecutor.editMessageWithHtml(userDto.getChatId(), userSessionService.getMainMessageId(userDto.getChatId()), message, keyboard);
             return;
         }
@@ -69,7 +69,7 @@ public class StartRegistrationCommand implements Command {
         <u>💡 Вы сможете изменить роль позже в настройках</u>
         """;
 
-        InlineKeyboardMarkup keyboard = registrationKeyboard.createRegistrationInProgressKeyboard(UserRole.RegistrationStatus.REGISTERED);
+        InlineKeyboardMarkup keyboard = registrationKeyboard.createRegistrationInProgressKeyboard(UserRole.RegistrationStatus.REGISTERED, context.getChatId());
         botExecutor.editMessageWithHtml(userDto.getChatId(), userSessionService.getMainMessageId(userDto.getChatId()), text, keyboard);
         log.info("🚀 Registration started via callback for: {}", userDto.getChatId());
     }

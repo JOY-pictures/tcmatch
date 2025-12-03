@@ -40,4 +40,6 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     List<Application> findByProjectId(Long projectId);
 
     List<Application> findByFreelancerChatIdOrderByAppliedAtDesc(Long chatId);
+
+    List<Application> findByFreelancerChatIdAndStatus(Long chatId, UserRole.ApplicationStatus status);
 }

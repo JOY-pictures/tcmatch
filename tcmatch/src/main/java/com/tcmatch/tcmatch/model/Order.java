@@ -1,6 +1,8 @@
 package com.tcmatch.tcmatch.model;
 
 
+import com.tcmatch.tcmatch.model.enums.OrderStatus;
+import com.tcmatch.tcmatch.model.enums.PaymentType;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -13,76 +15,56 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders") // Важно: "order" часто является зарезервированным словом в SQL
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class Order {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @JoinColumn(name = "project_id", nullable = false)
+    // Ссылка на проект
+    @Column(nullable = false)
     private Long projectId;
 
-    @JoinColumn(name = "application_id", nullable = false)
+    // Ссылка на отклик, который был принят
+    @Column(nullable = false, unique = true)
     private Long applicationId;
 
-    @JoinColumn(name = "customer_chat_id", nullable = false)
+    // ID заказчика (chatId или userId, в зависимости от твоей структуры)
+    @Column(nullable = false)
     private Long customerChatId;
 
-    @JoinColumn(name = "freelancer_chat_id", nullable = false)
+    // ID исполнителя (chatId или userId)
+    @Column(nullable = false)
     private Long freelancerChatId;
 
-    private String title;
-    private String description;
-    private Double totalBudget;
+    // Бюджет, который исполнитель предложил в отклике
+    @Column(nullable = false)
+    private double totalBudget;
+
+    // Срок, который исполнитель предложил
+    @Column(nullable = false)
     private Integer estimatedDays;
 
     @Enumerated(EnumType.STRING)
-    @Builder.Default
-    private UserRole.OrderStatus status = UserRole.OrderStatus.CREATED;
+    @Column(nullable = false)
+    private PaymentType paymentType;
 
-    // Система правок
-    @Builder.Default
-    private Integer revisionCount = 0;
+    // Количество этапов (если paymentType = MILESTONES).
+    // Если FULL, то это 1.
+    @Column(nullable = false)
+    private Integer milestoneCount;
 
-    @Builder.Default
-    private Integer clarificationCount = 0;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderStatus status;
 
-    @Builder.Default
-    private Integer maxRevisions = 3;
-
-    @Builder.Default
-    private Integer maxClarifications = 5;
-
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
-
+    private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
-    private LocalDateTime deadline;
-
-    // Поэтапная оплата
-    @ElementCollection
-    @Builder.Default
-    private List<PaymentStage> paymentStages = new ArrayList<>();
-
-    //поле для текущих комментариев к правкам
-    private String currentRevisionNotes;
-
-    //история всех правок
-    @ElementCollection
-    @CollectionTable(name = "order_revision_history", joinColumns = @JoinColumn(name = "order_id"))
-    @Builder.Default
-    private List<RevisionNote> revisionHistory = new ArrayList<>();
-
-    // Дополнительные поля
-    private String customerRequirements;
-    private String workResult;
-
-    private String customerFeedback; // Отзыв заказчика
-    private String freelancerFeedback; // Отзыв исполнителя
+    private LocalDateTime cancelledAt;
 }

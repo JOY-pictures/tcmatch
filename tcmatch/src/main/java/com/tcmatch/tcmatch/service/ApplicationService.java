@@ -16,6 +16,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +40,7 @@ public class ApplicationService {
     @Lazy
     private final BotExecutor botExecutor;
 
+    private final SubscriptionService subscriptionService;
 
     @Transactional
     public Application createApplication(Long projectId, Long freelancerChatId,
@@ -44,9 +48,10 @@ public class ApplicationService {
                                          Integer proposedDays) {
         Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException(("Пользователь не найден")));
 
-        User freelancer = userService.findByChatId(freelancerChatId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
+
+        UserDto freelancer = userService.getUserDtoByChatId(freelancerChatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
         Long customerChatId = projectService.getCustomerChatIdByProjectId(projectId);
         if (customerChatId.equals(freelancerChatId)) {
@@ -70,6 +75,8 @@ public class ApplicationService {
                 .build();
 
         Application savedApplication = applicationRepository.save(application);
+
+        subscriptionService.decrementApplicationCount(freelancer.getChatId());
 
         ApplicationDto applicationDto = getApplicationDtoById(application.getId());
 
@@ -396,5 +403,14 @@ public class ApplicationService {
         } catch (Exception e) {
             log.error("❌ Ошибка отправки уведомлений об отмене проекта {}: {}", project.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * Ищет отклики со статусом ACCEPTED для данного фрилансера с пагинацией.
+     */
+    public List<Application> getApplicationsByFreelancerChatIdAndStatus(Long freelancerChatId, UserRole.ApplicationStatus status) {
+        // 🔥 Предполагаем, что этот метод существует в вашем ApplicationRepository:
+        // findByFreelancerChatIdAndStatus(Long chatId, ApplicationStatus status)
+        return applicationRepository.findByFreelancerChatIdAndStatus(freelancerChatId, status);
     }
 }

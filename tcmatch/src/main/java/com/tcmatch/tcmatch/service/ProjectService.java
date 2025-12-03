@@ -310,8 +310,22 @@ public class ProjectService {
 
     // ProjectService.java - ДОБАВЛЯЕМ МЕТОДЫ ДЛЯ ID
     public List<Long> getFavoriteProjectIds(Long chatId) {
-        // 🔥 ВОЗВРАЩАЕМ ТОЛЬКО ID (уже есть в UserService)
-        return userService.getFavoriteProjectIds(chatId);
+        // 1. Получаем все избранные ID (используем существующий метод)
+        // (Этот метод загружает ID из сущности User)
+        List<Long> allFavoriteIds = userService.getFavoriteProjectIds(chatId);
+
+        if (allFavoriteIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 2. Загружаем сами сущности проектов по их ID
+        List<Project> favoriteProjects = projectRepository.findByIdIn(allFavoriteIds);
+
+        // 3. 🔥 ФИЛЬТРУЕМ на уровне сервиса по статусу OPEN
+        return favoriteProjects.stream()
+                .filter(project -> project.getStatus() == UserRole.ProjectStatus.OPEN)
+                .map(Project::getId)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)

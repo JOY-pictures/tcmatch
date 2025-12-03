@@ -78,7 +78,7 @@ public class BackCommand implements Command {
         try {
             String text = textMessageService.getMainMenuText();
 
-            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard();
+            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard(chatId);
 
             Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);
             botExecutor.editMessageWithHtml(chatId, mainMessageId, text, keyboard);

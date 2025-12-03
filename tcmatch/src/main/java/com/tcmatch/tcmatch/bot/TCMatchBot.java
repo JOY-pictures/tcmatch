@@ -102,6 +102,7 @@ public class TCMatchBot extends TelegramLongPollingBot implements BotExecutor{
 
         try {
             lockUser(chatId);
+
             // Проверяем, что это текстовое сообщение
             if (update.hasCallbackQuery()) {
                 handleCallbackQuery(update.getCallbackQuery());
@@ -288,7 +289,7 @@ public class TCMatchBot extends TelegramLongPollingBot implements BotExecutor{
         } else {
             log.warn("⚠️ Keyboard is null for chatId: {}, using fallback", chatId);
             // Fallback - главное меню
-            message.setReplyMarkup(commonKeyboards.createMainMenuKeyboard());
+            message.setReplyMarkup(commonKeyboards.createMainMenuKeyboard(chatId));
         }
 
         try {
@@ -485,7 +486,7 @@ public class TCMatchBot extends TelegramLongPollingBot implements BotExecutor{
 
             // Создаем новое главное сообщение
             String text = textMessageService.getMainMenuText();
-            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard();
+            InlineKeyboardMarkup keyboard = commonKeyboards.createMainMenuKeyboard(chatId);
 
             Integer newMainMessageId = sendHtmlMessageReturnId(chatId, text, keyboard);
             if (newMainMessageId != null) {

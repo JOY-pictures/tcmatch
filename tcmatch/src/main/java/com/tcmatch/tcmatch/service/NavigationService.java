@@ -28,6 +28,12 @@ public class NavigationService {
             return;
         }
 
+        // 🚫 НЕ СОХРАНЯЕМ ТЕКУЩИЙ ЭКРАН ПРИ НАВИГАЦИИ "НАЗАД"
+        if ("subscription".equals(actionType) && "select".equals(action)) {
+            log.debug("📱 Skipping history save for select subscription");
+            return;
+        }
+
         if ("notification".equals(actionType) && ("delete".equals(action) || "view".equals(action))) {
             log.debug("📱 Skipping history save for delete message");
             return;

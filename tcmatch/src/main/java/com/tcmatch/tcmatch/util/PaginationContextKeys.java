@@ -11,6 +11,8 @@ public class PaginationContextKeys {
     public static final String PROJECT_FAVORITES_CONTEXT_KEY = "favorites";
     public static final String MY_PROJECTS_CONTEXT_KEY = "my_projects";
 
+    public static final String ACCEPTED_APPLICATIONS_CONTEXT_KEY = "accepted_applications"; // 🔥 Новый ключ
+
     // 🔥 Константы для Уведомлений
     public static final String NOTIFICATION_CENTER_CONTEXT_KEY = "notification_center";
 

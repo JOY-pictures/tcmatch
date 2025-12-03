@@ -59,6 +59,8 @@ public class ApplicationPaginationCommand implements Command {
                 renderer = this::renderFreelancerApplicationsPage;
             } else if (PaginationContextKeys.PROJECT_APPLICATIONS_CONTEXT_KEY.equals(contextKey)) {
                 renderer = this::renderProjectApplicationsPage;
+            } else if (PaginationContextKeys.ACCEPTED_APPLICATIONS_CONTEXT_KEY.equals(contextKey)) { // 🔥 ДОБАВЛЕН НОВЫЙ КЛЮЧ
+                renderer = this::renderAcceptedApplicationsPage;
             }
 
             if (renderer == null) {
@@ -81,6 +83,69 @@ public class ApplicationPaginationCommand implements Command {
             log.error("❌ Ошибка пагинации откликов: {}", e.getMessage());
             botExecutor.sendTemporaryErrorMessage(context.getChatId(), "Ошибка переключения страницы", 5);
         }
+    }
+
+    // 🔥 МЕТОД РЕНДЕРИНГА ДЛЯ ПРИНЯТЫХ ОТКЛИКОВ (ВЫПОЛНЯЕМЫЕ ЗАКАЗЫ)
+    public List<Integer> renderAcceptedApplicationsPage(List<Long> pageApplicationIds, PaginationContext context) {
+        Long chatId = context.chatId();
+        List<Integer> messageIds = new ArrayList<>();
+
+        // 1. Получаем DTO
+        List<ApplicationDto> pageApplications = applicationService.getApplicationsByIds(pageApplicationIds);
+
+        // 2. Заголовок
+        String headerText = String.format("""
+        ⚙️ <b>ВЫПОЛНЯЕМЫЕ ЗАКАЗЫ</b>
+        
+        <i>Найдено %d заказов. Страница %d из %d</i>
+        """, context.entityIds().size(), context.currentPage() + 1, context.getTotalPages());
+
+        Integer headerId = botExecutor.getOrCreateMainMessageId(chatId);
+        botExecutor.editMessageWithHtml(chatId, headerId, headerText, null);
+
+        // 3. Карточки откликов
+        for (int i = 0; i < pageApplications.size(); i++) {
+            ApplicationDto application = pageApplications.get(i);
+            // Используем специальный формат для отображения активного заказа
+            String applicationCardText = formatAcceptedApplicationPreview(application, (context.currentPage() * context.pageSize()) + i + 1);
+
+            // 🔥 КЛАВИАТУРА: Создаем кнопку, которая вызовет ApplicationDetailsCommand
+            // (который затем перенаправит на OrderDetailsCommand)
+            InlineKeyboardMarkup keyboard = applicationKeyboards.createApplicationItemKeyboard(application.getId());
+
+            Integer cardId = botExecutor.sendHtmlMessageReturnId(chatId, applicationCardText, keyboard);
+            if (cardId != null) messageIds.add(cardId);
+        }
+
+        // 4. Пагинация
+        InlineKeyboardMarkup paginationKeyboard = commonKeyboards.createPaginationKeyboardForContext(context);
+
+        Integer navId = botExecutor.sendHtmlMessageReturnId(chatId, "<b>— Навигация —</b>", paginationKeyboard);
+        if (navId != null) messageIds.add(navId);
+
+        return messageIds;
+    }
+
+    // 🔥 Новый формат для Accepted Application
+    private String formatAcceptedApplicationPreview(ApplicationDto application, int number) {
+        String projectTitle = projectService.getProjectTitleById(application.getProjectId());
+
+        return """
+    <b>🚀 **ЗАКАЗ #%d**</b>
+    
+    <blockquote><b>💼 *Проект:* %s</b>
+    <b>💰 *Сумма заказа:* %.0f руб</b>
+    <b>⏱️ *Срок:* %d дней</b>
+    <b>📅 *Принят:* %s</b>
+    <b>📊 *Статус:* Активен (Ожидает первого этапа)</b></blockquote>
+    """.formatted(
+                number,
+                projectTitle,
+                application.getProposedBudget(),
+                application.getProposedDays(),
+                application.getAppliedAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy")), // Используем дату подачи как дату принятия
+                getApplicationStatusDisplay(application.getStatus())
+        );
     }
 
     public List<Integer> renderFreelancerApplicationsPage(List<Long> pageApplicationIds, PaginationContext context) {
