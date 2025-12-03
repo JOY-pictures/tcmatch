@@ -3,7 +3,8 @@ package com.tcmatch.tcmatch.model.enums;
 public enum UserRole {
     CUSTOMER,
     FREELANCER,
-    ADMIN;
+    ADMIN,
+    UNREGISTERED;
 
     public enum OrderStatus {
         CREATED,
@@ -44,8 +45,9 @@ public enum UserRole {
     public enum RegistrationStatus {
         NOT_REGISTERED,     // Пользователь только написал /start
         REGISTERED,         // Создан аккаунт (/register), но правила не видел
-        RULES_VIEWED,       // Просмотрел правила (/rules), но не принял
-        ROLE_SELECTED, RULES_ACCEPTED      // Принял правила (/accept_rules) - полный доступ
+        ROLE_SELECTED,
+        RULES_VIEWED,
+        RULES_ACCEPTED  // Просмотрел правила (/rules), но не принял
     }
 
     public enum UserStatus {

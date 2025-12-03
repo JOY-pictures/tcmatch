@@ -2,16 +2,19 @@ package com.tcmatch.tcmatch.service;
 
 import com.tcmatch.tcmatch.model.Project;
 import com.tcmatch.tcmatch.model.User;
+import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,8 +25,14 @@ public class UserService {
     private OrderService orderService;
     private ApplicationService applicationService;
     private ReputationService reputationService;
-    private final UserRepository userRepository;
 
+    private final  UserRepository userRepository;
+
+    @Lazy
+    @Autowired
+    private SubscriptionService subscriptionService;
+
+    @Transactional
     public User registerFromTelegram(Long chatId, String username, String firstName, String lastName) {
         Optional<User> existingUser = userRepository.findByChatId(chatId);
 
@@ -34,9 +43,9 @@ public class UserService {
 
         User user = User.builder()
                 .chatId(chatId)
-                .username(username)
-                .firstname(firstName)
-                .lastname(lastName)
+                .userName(username)
+                .firstName(firstName)
+                .lastName(lastName)
                 .role(UserRole.FREELANCER)
                 // 🔥 ИНИЦИАЛИЗИРУЕМ НОВЫЕ ПОЛЯ
                 .professionalRating(0.0)
@@ -53,8 +62,14 @@ public class UserService {
                 .registeredAt(LocalDateTime.now())
                 .lastActivityAt(LocalDateTime.now())
                 .build();
+
         User savedUser = userRepository.save(user);
         log.info("✅ Создан пользователь: {}", savedUser);
+
+        // 🔥 КРИТИЧЕСКИ ВАЖНЫЙ ШАГ: ИНИЦИАЛИЗАЦИЯ БЕСПЛАТНОЙ ПОДПИСКИ
+        // Используем ID, который был сгенерирован при сохранении (savedUser.getId())
+        subscriptionService.initializeNewUserSubscription(savedUser.getId());
+
         return savedUser;
     }
 
@@ -90,7 +105,7 @@ public class UserService {
 
             if (orderService != null) {
                 try {
-                    activeOrders = orderService.getActiveOrderCount(chatId);
+//                    activeOrders = orderService.getActiveOrderCount(chatId);
                 } catch (Exception e) {
                     log.warn("⚠️ Не удалось получить заказы пользователя {}: {}", chatId, e.getMessage());
                 }
@@ -134,6 +149,7 @@ public class UserService {
         return stats;
     }
 
+    @Transactional
     public User markRulesViewed(Long chatId) {
         User user = userRepository.findByChatId(chatId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -145,6 +161,8 @@ public class UserService {
         log.info("📜 User viewed rules: {}", chatId);
         return savedUser;
     }
+
+    @Transactional
     public User acceptRules(Long chatId) {
         User user = userRepository.findByChatId(chatId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -231,11 +249,178 @@ public class UserService {
         return savedUser;
     }
 
+    public List<Long> getFavoriteProjectIds(Long chatId) {
+        User user = userRepository.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        return user.getFavoriteProjects();
+    }
+
+    @Transactional
+    public boolean addFavoriteProject(Long chatId, Long projectId) {
+        try {
+            User user = userRepository.findByChatId(chatId)
+                    .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+            List<Long> favoriteProjects = user.getFavoriteProjects();
+
+            favoriteProjects.add(projectId);
+            user.setFavoriteProjects(favoriteProjects);
+
+            userRepository.save(user);
+        } catch (Exception e) {
+            log.error("❌ ошибка добавления проекта %d в избранное у пользователя %s".formatted(projectId, chatId));
+            return false;
+        }
+        return true;
+    }
+
+    @Transactional
+    public boolean removeFavoriteProject(Long chatId, Long projectId) {
+        try {
+            User user = userRepository.findByChatId(chatId)
+                    .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+            List<Long> favoriteProjects = user.getFavoriteProjects();
+
+            favoriteProjects.remove(projectId);
+            user.setFavoriteProjects(favoriteProjects);
+
+            userRepository.save(user);
+        } catch (Exception e) {
+            log.error("❌ ошибка удаления проекта %d из избранного у пользователя %s".formatted(projectId, chatId));
+            return false;
+        }
+        return true;
+    }
+
+    public boolean isProjectFavorite(Long chatId, Long projectId) {
+        User user = userRepository.findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        List<Long> favoriteProjects = user.getFavoriteProjects();
+        return favoriteProjects.contains(projectId);
+    }
+
     public Optional<User> findByChatId(Long chatId) {
         return userRepository.findByChatId(chatId);
     }
 
     public boolean userExists(Long chatId) {
         return userRepository.existsByChatId(chatId);
+    }
+
+    public Optional<UserDto> getUserDtoByChatId(Long chatId) {
+        return userRepository.findByChatId(chatId)
+                .map(UserDto::fromEntity);
+    }
+
+    public List<UserDto> getUsersDtoByChatIds(List<Long> chatIds) {
+        if (chatIds.isEmpty()) return Collections.emptyList();
+
+        List<User> users = userRepository.findByChatIdIn(chatIds);
+        return users.stream()
+                .map(UserDto::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public UserDto createNewUser(Long chatId, String userName) {
+        try {
+            // 🔥 СОЗДАЕМ НОВОГО ПОЛЬЗОВАТЕЛЯ
+            User newUser = User.builder()
+                    .chatId(chatId)
+                    .userName(userName)
+                    .role(UserRole.FREELANCER) // или другая роль по умолчанию
+                    .status(UserRole.UserStatus.ACTIVE)
+                    .registrationStatus(UserRole.RegistrationStatus.NOT_REGISTERED)
+                    .build();
+
+            User savedUser = userRepository.save(newUser);
+            log.info("✅ Создан новый пользователь: {} (chatId: {})", userName, chatId);
+
+            return UserDto.fromEntity(savedUser);
+
+        } catch (Exception e) {
+            log.error("❌ Ошибка создания пользователя: {}", e.getMessage());
+            throw new RuntimeException("Не удалось создать пользователя");
+        }
+    }
+
+    // 🔥 НОВЫЙ МЕТОД: Получение роли пользователя
+    public UserRole getUserRole(Long chatId) {
+        // Предполагаем, что getRole возвращает enum UserRole
+        return userRepository.findByChatId(chatId)
+                .map(User::getRole)
+                .orElse(UserRole.UNREGISTERED); // Используйте подходящий дефолт
+    }
+
+    /**
+     * 🔥 ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+     */
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    /**
+     * 🔥 ПОЛУЧЕНИЕ ВСЕХ ФРИЛАНСЕРОВ
+     */
+    public List<UserDto> getAllFreelancers() {
+        List<User> freelancers = userRepository.findAll().stream()
+                .filter(user -> user.getRole() == UserRole.FREELANCER)
+                .collect(Collectors.toList());
+
+        return freelancers.stream()
+                .map(UserDto::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 🔥 ОБНОВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ
+     */
+    @Transactional
+    public User updateUser(User user) {
+        user.setUpdatedAt(LocalDateTime.now());
+        User savedUser = userRepository.save(user);
+        log.debug("✅ Пользователь обновлен: {}", user.getChatId());
+        return savedUser;
+    }
+
+    /**
+     * 🔥 Обновить GitHub URL пользователя
+     */
+    @Transactional
+    public void updateUserGitHubUrl(Long chatId, String githubUrl) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setGithubUrl(githubUrl);
+        userRepository.save(user);
+
+        log.info("Обновлен GitHub URL для пользователя {}: {}", chatId, githubUrl);
+    }
+
+    /**
+     * 🔥 Пометить пользователя как верифицированного
+     */
+    @Transactional
+    public void markUserAsVerified(Long chatId) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setIsVerified(true);
+        userRepository.save(user);
+
+        log.info("Пользователь {} помечен как верифицированный", chatId);
+    }
+
+    /**
+     * 🔥 Снять верификацию с пользователя
+     */
+    @Transactional
+    public void unmarkUserAsVerified(Long chatId) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setIsVerified(false);
+        userRepository.save(user);
+
+        log.info("С пользователя {} снята верификация", chatId);
     }
 }

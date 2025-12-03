@@ -3,6 +3,7 @@ package com.tcmatch.tcmatch.config;
 import com.tcmatch.tcmatch.model.Project;
 import com.tcmatch.tcmatch.model.User;
 import com.tcmatch.tcmatch.model.enums.UserRole;
+import com.tcmatch.tcmatch.service.ApplicationService;
 import com.tcmatch.tcmatch.service.ProjectService;
 import com.tcmatch.tcmatch.service.UserService;
 import jakarta.annotation.PostConstruct;
@@ -23,6 +24,7 @@ public class TestDataInitializer {
 
     private final UserService userService;
     private final ProjectService projectService;
+    private final ApplicationService applicationService;
 
     @PostConstruct
     public void init() {
@@ -32,6 +34,8 @@ public class TestDataInitializer {
                 log.info("🚀 Creating test data...");
                 createTestData();
                 log.info("✅ Тестовые данные успешно созданы");
+                applicationService.createApplication(7L, 7965798029L, "Я готов в срок выполнить ваш заказ", 10000.0, 20);
+
             } else {
                 log.info("✅ Тестовые данные уже существуют");
             }
@@ -43,9 +47,11 @@ public class TestDataInitializer {
     private void createTestData() {
         User customer1 = createTestUser(111111111L, "customer1", "Алексей", "Попов", UserRole.CUSTOMER, "Business", "Management");
         User customer2 = createTestUser(222222222L, "customer2", "Мария", "Проджект", UserRole.CUSTOMER, "Startup", "Project Management");
+        User niddyCustomer = createTestUser(5519912522L, "xN1DDYx", "Шероз", "Проджект", UserRole.CUSTOMER, "Business", "Project Management");
 
         User freelancer1 = createTestUser(333333333L, "freelancer1", "Дмитрий", "Разработчик", UserRole.FREELANCER, "Backend", "Java, Spring, PostgreSQL");
         User freelancer2 = createTestUser(444444444L, "freelancer2", "Анна", "Дизайнер", UserRole.FREELANCER, "Frontend", "React, JavaScript, UI/UX");
+        User profitFreelancer = createTestUser(7965798029L, "Profity12", "Артур", "Программист", UserRole.FREELANCER, "Bckend", "Java");
 
         List<Project> testProjects = Arrays.asList(
                 createProject(customer1, "Разработка CRM системы",
@@ -70,6 +76,10 @@ public class TestDataInitializer {
 
                 createProject(customer2, "API для сервиса доставки",
                         "Разработка backend для агрегатора служб доставки. Функции: расчет стоимости, отслеживание, уведомления.",
+                        35000.0, 20, "Node.js, Express, MongoDB, WebSocket"),
+
+                createProject(niddyCustomer, "API для сервиса доставки",
+                        "Разработка backend для агрегатора служб доставки. Функции: расчет стоимости, отслеживание, уведомления.",
                         35000.0, 20, "Node.js, Express, MongoDB, WebSocket")
         );
 
@@ -81,7 +91,7 @@ public class TestDataInitializer {
     private User createTestUser(Long chatId, String username, String firstname, String lastname, UserRole role, String specialization, String skills) {
             User user = userService.registerFromTelegram(chatId, username, firstname, lastname);
 
-            user.setRole(role);
+            userService.updateUserRole(chatId, role);
             user.setIsVerified(true);
             user.setVerificationMethod("TEST_DATA");
             userService.updateProfessionalInfo(chatId, specialization, "Middle", skills);
@@ -95,7 +105,7 @@ public class TestDataInitializer {
                 .title(title)
                 .description(description)
                 .budget(budget)
-                .customer(customer)
+                .customerChatId(customer.getChatId())
                 .deadline(LocalDateTime.now().plusDays(days))
                 .requiredSkills(skills)
                 .estimatedDays(days)

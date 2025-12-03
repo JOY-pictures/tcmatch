@@ -21,13 +21,20 @@ public class Application {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
-    private Project project;
+//    @ManyToOne(fetch = FetchType.LAZY)
+//    @JoinColumn(name = "project_id", nullable = false)
+//    private Project project;
+    // 🔥 ЗАМЕНЯЕМ ССЫЛКУ НА Project НА ID
+    @Column(name = "project_id")
+    private Long projectId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "freelancer_id", nullable = false)
-    private User freelancer;
+
+//    @ManyToOne(fetch = FetchType.LAZY)
+//    @JoinColumn(name = "freelancer_id", nullable = false)
+//    private User freelancer;
+    // 🔥 ЗАМЕНЯЕМ ССЫЛКУ НА User (фрилансера) НА ID
+    @Column(name = "freelancer_chat_id")
+    private Long freelancerChatId;
 
     @Column(length = 3200)
     private String coverLetter;
@@ -43,5 +50,7 @@ public class Application {
     private LocalDateTime appliedAt = LocalDateTime.now();
 
     private LocalDateTime reviewedAt;
+
+    @Column(length = 1600)
     private String customerComment;
 }

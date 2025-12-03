@@ -11,6 +11,11 @@
           <package value="com.devlink.devlink" />
         </packages>
       </persistence-unit>
+      <persistence-unit moduleName="tcmatch" name="Default">
+        <packages>
+          <package value="com.tcmatch.tcmatch" />
+        </packages>
+      </persistence-unit>
     </persistence-units>
   </component>
 </project>
