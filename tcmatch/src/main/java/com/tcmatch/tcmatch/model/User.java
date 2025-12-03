@@ -52,6 +52,8 @@ public class User {
     private LocalDateTime rulesViewedAt;
     private LocalDateTime rulesAcceptedAt;
 
+    private String githubUrl;
+
     // 🔥 НОВЫЕ ПОЛЯ ДЛЯ СИСТЕМЫ РЕПУТАЦИИ
     @Builder.Default
     private Double professionalRating = 0.0; // ПРП - основной рейтинг

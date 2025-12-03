@@ -3,6 +3,7 @@ package com.tcmatch.tcmatch.model;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
 import com.tcmatch.tcmatch.model.dto.OrderCreationState;
 import com.tcmatch.tcmatch.model.dto.ProjectCreationState;
+import com.tcmatch.tcmatch.model.enums.UserState;
 import com.tcmatch.tcmatch.service.ProjectSearchService;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -28,6 +29,10 @@ public class UserSession {
     private ApplicationCreationState applicationCreationState;
     private OrderCreationState orderCreationState;
     private ProjectSearchService.SearchState searchState;
+    private UserState userState;
+
+    // 🔥 ВРЕМЕННЫЕ ДАННЫЕ ДЛЯ ВЕРИФИКАЦИИ
+    private String pendingGitHubUrl;
 
     // 🔥 СИСТЕМНЫЕ ДАННЫЕ
     private Integer mainMessageId;
@@ -185,5 +190,20 @@ public class UserSession {
         public boolean isExpired() {
             return createdAt.isBefore(LocalDateTime.now().minusMinutes(15));
         }
+    }
+
+    // 🔥 ПРОСТЫЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ СОСТОЯНИЕМ
+    public void setWaitingForGitHub() {
+        this.userState = UserState.WAITING_GITHUB_URL;
+        this.pendingGitHubUrl = null;
+    }
+
+    public void clearState() {
+        this.userState = UserState.NONE;
+        this.pendingGitHubUrl = null;
+    }
+
+    public boolean isWaitingForGitHub() {
+        return this.userState == UserState.WAITING_GITHUB_URL;
     }
 }

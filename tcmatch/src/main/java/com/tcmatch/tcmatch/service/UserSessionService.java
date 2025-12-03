@@ -256,6 +256,7 @@ public class UserSessionService {
         // 🔥 ОЧИЩАЕМ СПЕЦИАЛИЗИРОВАННЫЕ СОСТОЯНИЯ
         clearApplicationCreationState(chatId);
         clearProjectCreationState(chatId);
+        session.clearState();
 
         log.debug("📱 Reset to main - cleared history and states for user: {}", chatId);
     }
@@ -512,5 +513,47 @@ public class UserSessionService {
 //                        totalCleaned);
 //            }
         }
+    }
+
+    public void setWaitingForGitHub(Long chatId) {
+        UserSession session = getSession(chatId);
+        session.setWaitingForGitHub();
+        log.debug("User {} now waiting for GitHub URL", chatId);
+    }
+
+    public boolean isWaitingForGitHub(Long chatId) {
+        UserSession session = getSession(chatId);
+        return session != null && session.isWaitingForGitHub();
+    }
+
+    /**
+     * 🔥 ПРОСТОЙ МЕТОД: Очистить состояние
+     */
+    public void clearUserState(Long chatId) {
+        UserSession session = getSession(chatId);
+        if (session != null) {
+            session.clearState();
+        }
+    }
+
+    /**
+     * 🔥 ПРОСТОЙ МЕТОД: Сохранить временный GitHub URL
+     */
+    public void savePendingGitHubUrl(Long chatId, String githubUrl) {
+        UserSession session = getSession(chatId);
+        session.setPendingGitHubUrl(githubUrl);
+    }
+
+    /**
+     * 🔥 ПРОСТОЙ МЕТОД: Получить и очистить временный GitHub URL
+     */
+    public String getAndClearPendingGitHubUrl(Long chatId) {
+        UserSession session = getSession(chatId);
+        if (session == null) return null;
+
+        String url = session.getPendingGitHubUrl();
+        session.setPendingGitHubUrl(null);
+
+        return url;
     }
 }

@@ -68,7 +68,7 @@ public class ShowProfileCommand implements Command {
                 reviewStatus,
                 ratingDisplay);
 
-        InlineKeyboardMarkup keyboard = profileKeyboards.createPersonalAccountKeyboard();
+        InlineKeyboardMarkup keyboard = profileKeyboards.createPersonalAccountKeyboard(context.getChatId());
         botExecutor.editMessageWithHtml(context.getChatId(), context.getMessageId(), profileText, keyboard);
     }
 

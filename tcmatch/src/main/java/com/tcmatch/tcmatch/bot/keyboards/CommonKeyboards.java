@@ -3,6 +3,7 @@ package com.tcmatch.tcmatch.bot.keyboards;
 import com.tcmatch.tcmatch.model.dto.PaginationContext;
 import com.tcmatch.tcmatch.model.dto.UserDto;
 import com.tcmatch.tcmatch.model.enums.UserRole;
+import com.tcmatch.tcmatch.service.AdminService;
 import com.tcmatch.tcmatch.service.UserService;
 import com.tcmatch.tcmatch.util.PaginationContextKeys;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import java.util.List;
 public class CommonKeyboards {
 
     private final UserService userService;
+    private final AdminService adminService;
 
     public InlineKeyboardMarkup getKeyboardForUser(Long chatId) {
 
@@ -252,6 +254,16 @@ public class CommonKeyboards {
                     .callbackData("subscription:show_menu") // 🔥 Новая команда!
                     .build());
             rows.add(row3);
+        }
+
+        // 🔥 ДОБАВЛЯЕМ КНОПКУ АДМИНА ЕСЛИ ПОЛЬЗОВАТЕЛЬ - АДМИН
+        if (adminService.isAdmin(chatId)) {
+            List<InlineKeyboardButton> adminRow = new ArrayList<>();
+            adminRow.add(InlineKeyboardButton.builder()
+                    .text("🛠️ Админ-панель")
+                    .callbackData("admin:panel")
+                    .build());
+            rows.add(adminRow);
         }
 
         inlineKeyboard.setKeyboard(rows);

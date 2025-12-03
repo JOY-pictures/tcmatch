@@ -1,5 +1,8 @@
 package com.tcmatch.tcmatch.bot.keyboards;
 
+import com.tcmatch.tcmatch.model.enums.VerificationStatus;
+import com.tcmatch.tcmatch.service.UserSessionService;
+import com.tcmatch.tcmatch.service.VerificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -14,7 +17,9 @@ import java.util.List;
 @Slf4j
 public class ProfileKeyboards {
 
-    public InlineKeyboardMarkup createPersonalAccountKeyboard() {
+    private final VerificationService verificationService;
+
+    public InlineKeyboardMarkup createPersonalAccountKeyboard(Long chatId) {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
@@ -28,14 +33,28 @@ public class ProfileKeyboards {
                 .callbackData("user_profile:edit")
                 .build());
 
-        List<InlineKeyboardButton> row2 = new ArrayList<>();
-        row2.add(InlineKeyboardButton.builder()
+
+        VerificationStatus status = verificationService.getGitHubVerificationStatus(chatId);
+
+        if (status == null || status.equals(VerificationStatus.REJECTED)) {
+            // 🔥 НОВАЯ КНОПКА ВЕРИФИКАЦИИ
+            List<InlineKeyboardButton> row2 = new ArrayList<>();
+            row2.add(InlineKeyboardButton.builder()
+                    .text("✅ Верификация")
+                    .callbackData("verification:start_github")
+                    .build());
+            rows.add(row2);
+        }
+
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(InlineKeyboardButton.builder()
                 .text("⬅️ Назад")
                 .callbackData("navigation:back")
                 .build());
 
         rows.add(row1);
-        rows.add(row2);
+
+        rows.add(row3);
 
         inlineKeyboard.setKeyboard(rows);
         return inlineKeyboard;

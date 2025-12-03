@@ -1,3 +1,12 @@
+admin:
+  enabled: true
+  super-admin-ids: 5519912522  # Ваш chatId
+
+  features:
+    verification: true
+    support: false      # Пока не реализуем
+    statistics: false   # Пока не реализуем
+
 server:
   shutdown: graceful  # 🔥 Включаем graceful shutdown
   port: 443

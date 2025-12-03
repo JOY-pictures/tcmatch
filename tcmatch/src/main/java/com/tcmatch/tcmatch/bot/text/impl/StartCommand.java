@@ -50,9 +50,11 @@ public class StartCommand implements TextCommand {
             if (userExists) {
                 if (userSessionService.hasSession(chatId)) {
                     log.info("🔄 Пользователь {} возвращается, очищаем сессию...", chatId);
+                    botExecutor.deletePreviousMessages(chatId);
                     userSessionService.resetToMain(chatId);
                     String menuText = textMessageService.getMainMenuText();
-                    botExecutor.editMessageWithHtml(chatId, messageId, menuText, commonKeyboards.createMainMenuKeyboard(chatId));
+                    Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);
+                    botExecutor.editMessageWithHtml(chatId, mainMessageId, menuText, commonKeyboards.createMainMenuKeyboard(chatId));
                     return;
                 }
             }

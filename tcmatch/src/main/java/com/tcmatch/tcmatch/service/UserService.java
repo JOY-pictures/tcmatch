@@ -381,4 +381,46 @@ public class UserService {
         log.debug("✅ Пользователь обновлен: {}", user.getChatId());
         return savedUser;
     }
+
+    /**
+     * 🔥 Обновить GitHub URL пользователя
+     */
+    @Transactional
+    public void updateUserGitHubUrl(Long chatId, String githubUrl) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setGithubUrl(githubUrl);
+        userRepository.save(user);
+
+        log.info("Обновлен GitHub URL для пользователя {}: {}", chatId, githubUrl);
+    }
+
+    /**
+     * 🔥 Пометить пользователя как верифицированного
+     */
+    @Transactional
+    public void markUserAsVerified(Long chatId) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setIsVerified(true);
+        userRepository.save(user);
+
+        log.info("Пользователь {} помечен как верифицированный", chatId);
+    }
+
+    /**
+     * 🔥 Снять верификацию с пользователя
+     */
+    @Transactional
+    public void unmarkUserAsVerified(Long chatId) {
+        User user = findByChatId(chatId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setIsVerified(false);
+        userRepository.save(user);
+
+        log.info("С пользователя {} снята верификация", chatId);
+    }
 }
