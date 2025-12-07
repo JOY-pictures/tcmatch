@@ -60,18 +60,18 @@ public class AdminKeyboards {
         if (adminService.isSuperAdmin(chatId)) {
             List<InlineKeyboardButton> row2 = new ArrayList<>();
 
-            // На будущее: статистика, управление пользователями и т.д.
-            row2.add(InlineKeyboardButton.builder()
-                    .text("⚙️ Настройки")
-                    .callbackData("admin:settings")
-                    .build());
-
-            row2.add(InlineKeyboardButton.builder()
-                    .text("📊 Статистика")
-                    .callbackData("admin:stats")
-                    .build());
-
-            rows.add(row2);
+//            // На будущее: статистика, управление пользователями и т.д.
+//            row2.add(InlineKeyboardButton.builder()
+//                    .text("⚙️ Настройки")
+//                    .callbackData("admin:settings")
+//                    .build());
+//
+//            row2.add(InlineKeyboardButton.builder()
+//                    .text("📊 Статистика")
+//                    .callbackData("admin:stats")
+//                    .build());
+//
+//            rows.add(row2);
         }
 
         // ========== РЯД 3: НАВИГАЦИЯ ==========
@@ -82,13 +82,81 @@ public class AdminKeyboards {
                 .callbackData("main:menu")
                 .build());
 
-        row3.add(InlineKeyboardButton.builder()
-                .text("🔄 Обновить")
-                .callbackData("admin:refresh")
-                .build());
+//        row3.add(InlineKeyboardButton.builder()
+//                .text("🔄 Обновить")
+//                .callbackData("admin:refresh")
+//                .build());
 
         rows.add(row3);
 
         return new InlineKeyboardMarkup(rows);
+    }
+
+    /**
+     * 🔥 БЫСТРАЯ КЛАВИАТУРА ДЛЯ УВЕДОМЛЕНИЙ
+     * (отправляется сразу с уведомлением о новой заявке)
+     */
+    public InlineKeyboardMarkup createQuickActionKeyboard(Long requestId, Long userChatId) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // Основные быстрые действия
+        List<InlineKeyboardButton> quickActions = new ArrayList<>();
+        quickActions.add(InlineKeyboardButton.builder()
+                .text("✅ Одобрить")
+                .callbackData("admin:verification:quick_approve:" + requestId)
+                .build());
+        quickActions.add(InlineKeyboardButton.builder()
+                .text("❌ Отклонить")
+                .callbackData("admin:verification:quick_reject:" + requestId)
+                .build());
+
+        rows.add(quickActions);
+
+        // Дополнительные действия
+        List<InlineKeyboardButton> moreActions = new ArrayList<>();
+        moreActions.add(InlineKeyboardButton.builder()
+                .text("📋 Подробнее")
+                .callbackData("admin:verification:details:" + requestId)
+                .build());
+        moreActions.add(InlineKeyboardButton.builder()
+                .text("👤 Профиль")
+                .callbackData("admin:user:view:" + userChatId)
+                .build());
+
+        rows.add(moreActions);
+
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    /**
+     * 🔥 Клавиатура "Готово" после действия
+     */
+    public InlineKeyboardMarkup createDoneKeyboard(Long requestId) {
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(
+                        List.of(
+                                InlineKeyboardButton.builder()
+                                        .text("✅ Обработано")
+                                        .callbackData("admin:verification:done:" + requestId)
+                                        .build()
+                        )
+                ))
+                .build();
+    }
+
+    /**
+     * 🔥 Клавиатура для ожидания комментария
+     */
+    public InlineKeyboardMarkup createAwaitCommentKeyboard(Long requestId) {
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(
+                        List.of(
+                                InlineKeyboardButton.builder()
+                                        .text("🚫 Отмена")
+                                        .callbackData("admin:verification:cancel_reject:" + requestId)
+                                        .build()
+                        )
+                ))
+                .build();
     }
 }

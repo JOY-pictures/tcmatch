@@ -74,7 +74,7 @@ public class ConfirmProjectCommand implements Command {
                     project.getRequiredSkills()
             );
 
-            userSessionService.clearNavigationHistory(chatId);
+            userSessionService.resetToMain(chatId);
 
             botExecutor.editMessageWithHtml(chatId, messageId, successText,
                     commonKeyboards.createToMainMenuKeyboard());

@@ -1,6 +1,9 @@
 package com.tcmatch.tcmatch.bot.keyboards;
 
+import com.tcmatch.tcmatch.model.dto.UserDto;
+import com.tcmatch.tcmatch.model.enums.UserRole;
 import com.tcmatch.tcmatch.model.enums.VerificationStatus;
+import com.tcmatch.tcmatch.service.UserService;
 import com.tcmatch.tcmatch.service.UserSessionService;
 import com.tcmatch.tcmatch.service.VerificationService;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +20,7 @@ import java.util.List;
 @Slf4j
 public class ProfileKeyboards {
 
-    private final VerificationService verificationService;
+    private final UserService userService;
 
     public InlineKeyboardMarkup createPersonalAccountKeyboard(Long chatId) {
         InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup();
@@ -34,17 +37,17 @@ public class ProfileKeyboards {
                 .build());
 
 
-        VerificationStatus status = verificationService.getGitHubVerificationStatus(chatId);
-
-        if (status == null || status.equals(VerificationStatus.REJECTED)) {
-            // 🔥 НОВАЯ КНОПКА ВЕРИФИКАЦИИ
+        UserDto user = userService.getUserDtoByChatId(chatId).orElseThrow(()-> new RuntimeException("Пользователь не найден"));
+        // 🔥 НОВАЯ КНОПКА ВЕРИФИКАЦИИ
+        if (user.getRole() == UserRole.FREELANCER) {
             List<InlineKeyboardButton> row2 = new ArrayList<>();
             row2.add(InlineKeyboardButton.builder()
                     .text("✅ Верификация")
-                    .callbackData("verification:start_github")
+                    .callbackData("verification:show")
                     .build());
             rows.add(row2);
         }
+
 
         List<InlineKeyboardButton> row3 = new ArrayList<>();
         row3.add(InlineKeyboardButton.builder()

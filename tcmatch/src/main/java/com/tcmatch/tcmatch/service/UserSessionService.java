@@ -5,6 +5,7 @@ import com.tcmatch.tcmatch.model.UserSession;
 import com.tcmatch.tcmatch.model.dto.ApplicationCreationState;
 import com.tcmatch.tcmatch.model.dto.OrderCreationState;
 import com.tcmatch.tcmatch.model.dto.ProjectCreationState;
+import com.tcmatch.tcmatch.model.dto.PurchaseConfirmationDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -256,6 +257,7 @@ public class UserSessionService {
         // 🔥 ОЧИЩАЕМ СПЕЦИАЛИЗИРОВАННЫЕ СОСТОЯНИЯ
         clearApplicationCreationState(chatId);
         clearProjectCreationState(chatId);
+        clearTopUpState(chatId);
         session.clearState();
 
         log.debug("📱 Reset to main - cleared history and states for user: {}", chatId);
@@ -556,4 +558,93 @@ public class UserSessionService {
 
         return url;
     }
+
+    /**
+     * 🔥 Установить ожидание комментария для отклонения заявки
+     */
+    public void setAwaitingRejectionComment(Long adminChatId, Long requestId) {
+        UserSession session = getSession(adminChatId);
+        session.putToContext("awaiting_rejection_comment", requestId);
+        log.debug("Админ {} ожидает комментарий для заявки {}", adminChatId, requestId);
+    }
+
+    /**
+     * 🔥 Проверить, ожидает ли админ ввода комментария
+     */
+    public boolean isAwaitingRejectionComment(Long adminChatId) {
+        UserSession session = getSession(adminChatId);
+        return session != null && session.getFromContext("awaiting_rejection_comment") != null;
+    }
+
+    /**
+     * 🔥 Получить ID заявки для которой ожидается комментарий
+     */
+    public Long getAwaitingRejectionRequestId(Long adminChatId) {
+        UserSession session = getSession(adminChatId);
+        if (session == null) return null;
+
+        Object requestId = session.getFromContext("awaiting_rejection_comment");
+        return requestId instanceof Long ? (Long) requestId : null;
+    }
+
+    public void setAwaitingTopUpAmount(Long chatId, Integer callbackMessageId) {
+        UserSession session = getSession(chatId);
+
+        session.putToContext("awaiting_top_up_amount", true);
+        log.info("Установлено состояние ожидания суммы пополнения для chatId={}",
+                chatId);
+    }
+
+    /**
+     * Проверяет, ожидается ли ввод суммы пополнения
+     */
+    public boolean isAwaitingTopUpAmount(Long chatId) {
+        UserSession session = getSession(chatId);
+        if (session == null) return false;
+
+        return (boolean) session.getFromContext("awaiting_top_up_amount").equals(true);
+    }
+
+    /**
+     * Очищает состояние пополнения
+     */
+    public void clearTopUpState(Long chatId) {
+        UserSession session = getSession(chatId);
+        if (session != null) {
+            session.removeFromContext("awaiting_top_up_amount");
+        }
+    }
+
+    public void setPurchaseConfirmation(Long chatId, PurchaseConfirmationDto dto) {
+        UserSession session = getSession(chatId);
+
+        session.putToContext("purchase_confirmation", dto);
+        session.putToContext("purchase_confirmation_time", System.currentTimeMillis());
+    }
+
+    public PurchaseConfirmationDto getPurchaseConfirmation(Long chatId) {
+        UserSession session = getSession(chatId);
+        if (session == null) return null;
+
+        return (PurchaseConfirmationDto) session.getFromContext("purchase_confirmation");
+    }
+
+    public void clearPurchaseConfirmation(Long chatId) {
+        UserSession session = getSession(chatId);
+        if (session != null) {
+            session.removeFromContext("purchase_confirmation");
+            session.removeFromContext("purchase_confirmation_time");
+        }
+    }
+
+//    public boolean isPurchaseConfirmationExpired(Long chatId) {
+//        UserSession session = getSession(chatId);
+//        if (session == null) return true;
+//
+//        Long timestamp = (Long) session.getFromContext("purchase_confirmation_time");
+//        if (timestamp == null) return true;
+//
+//        long fiveMinutes = 5 * 60 * 1000; // 5 минут
+//        return System.currentTimeMillis() - timestamp > fiveMinutes;
+//    }
 }

@@ -37,8 +37,9 @@ public class GitHubUrlTextCommand implements TextCommand {
         try {
             // 1. 🔥 ПРОСТАЯ ВАЛИДАЦИЯ
             if (!isValidGitHubUrl(text)) {
+                botExecutor.deleteMessage(chatId, messageId);
                 botExecutor.sendTemporaryErrorMessage(chatId,
-                        "❌ Неверный формат GitHub URL. Пример: https://github.com/username", 5);
+                        "❌ Неверный формат GitHub URL.", 5);
                 return;
             }
 
@@ -58,14 +59,13 @@ public class GitHubUrlTextCommand implements TextCommand {
             Integer mainMessageId = botExecutor.getOrCreateMainMessageId(chatId);
 
             // 5. 🔥 УВЕДОМЛЯЕМ ПОЛЬЗОВАТЕЛЯ
-            String userMessage = String.format("""
+            String userMessage = """
             <b>✅ Заявка отправлена!</b>
             
-            <b>GitHub:</b> %s
-            <b>ID заявки:</b> <code>#%d</code>
-            
             <i>Заявка будет рассмотрена в течение 1-2 рабочих дней.</i>
-            """, text, request.getId());
+            """;
+
+            userSessionService.resetToMain(chatId);
 
             botExecutor.editMessageWithHtml(chatId, mainMessageId, userMessage, commonKeyboards.createToMainMenuKeyboard());
 

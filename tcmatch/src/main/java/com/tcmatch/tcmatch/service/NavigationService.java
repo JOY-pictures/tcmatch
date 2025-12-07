@@ -39,6 +39,11 @@ public class NavigationService {
             return;
         }
 
+        if ("admin".equals(actionType)) {
+            log.debug("📱 Skipping history save for admin action");
+            return;
+        }
+
         if ("pagination".equals(action)) {
             log.debug("📱 Skipping history save for pagination");
             return;

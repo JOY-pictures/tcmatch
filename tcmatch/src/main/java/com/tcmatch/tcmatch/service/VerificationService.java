@@ -259,4 +259,42 @@ public class VerificationService {
 
         return userService.getUserDtoByChatId(request.get().getUserChatId());
     }
+
+    public boolean canSendRequest(Long chatId) {
+        VerificationStatus status = getGitHubVerificationStatus(chatId);
+
+        // 1. Никогда не отправлял заявку
+        if (status == null) {
+            log.debug("Пользователь {} может отправить заявку: никогда не отправлял", chatId);
+            return true;
+        }
+
+        // 2. Заявка на рассмотрении
+        if (status == VerificationStatus.PENDING) {
+            log.debug("Пользователь {} НЕ может отправить заявку: уже есть активная", chatId);
+            return false;
+        }
+
+        // 3. Заявка одобрена (уже верифицирован)
+        if (status == VerificationStatus.APPROVED) {
+            log.debug("Пользователь {} НЕ может отправить заявку: уже верифицирован", chatId);
+            return false;
+        }
+
+        if (status == VerificationStatus.REJECTED) {
+            VerificationRequest request = getCurrentGitHubVerificationRequest(chatId)
+                    .orElseThrow(() -> new RuntimeException("Заявка не найдена"));
+
+            if (request.getReviewedAt() == null) {
+                return true;
+            }
+
+            return LocalDateTime.now()
+                    .isAfter(request.getReviewedAt().plusMinutes(3));
+        }
+        else {
+            log.debug("Ошибка кнопки верификации!");
+            return false;
+        }
+    }
 }

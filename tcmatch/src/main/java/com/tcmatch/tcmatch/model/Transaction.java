@@ -32,7 +32,6 @@ public class Transaction {
 
     // Тариф, который пользователь пытался купить
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private SubscriptionTier tier;
 
     // Сумма, которая была заплачена
@@ -58,5 +57,10 @@ public class Transaction {
         this.amount = amount;
         this.status = TransactionStatus.PENDING;
         this.createdAt = LocalDateTime.now();
+    }
+
+    // Конструктор для пополнения баланса (без tier)
+    public Transaction(String paymentId, Long chatId, UUID idempotenceKey, Double amount) {
+        this(paymentId, chatId, idempotenceKey, null, amount);
     }
 }

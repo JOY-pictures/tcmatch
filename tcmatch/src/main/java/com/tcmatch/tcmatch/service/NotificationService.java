@@ -168,4 +168,13 @@ public class NotificationService {
 
         return sb.toString();
     }
+
+    /**
+     * 🔥 ПРОВЕРИТЬ, ИМЕЕТ ЛИ УВЕДОМЛЕНИЕ CALLBACK
+     */
+    public boolean hasCallback(Long notificationId) {
+        Notification notification = findById(notificationId);
+        return notification.getCallbackData() != null &&
+                !notification.getCallbackData().trim().isEmpty();
+    }
 }

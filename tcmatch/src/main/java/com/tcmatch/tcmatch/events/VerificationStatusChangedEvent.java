@@ -6,10 +6,10 @@ import lombok.Getter;
 @Getter
 public class VerificationStatusChangedEvent {
     private final VerificationRequest verificationRequest;
-    private final Long adminId;
+    private final Long adminChatId;
 
-    public VerificationStatusChangedEvent(VerificationRequest verificationRequest, Long adminId) {
+    public VerificationStatusChangedEvent(VerificationRequest verificationRequest, Long adminChatId) {
         this.verificationRequest = verificationRequest;
-        this.adminId = adminId;
+        this.adminChatId = adminChatId;
     }
 }

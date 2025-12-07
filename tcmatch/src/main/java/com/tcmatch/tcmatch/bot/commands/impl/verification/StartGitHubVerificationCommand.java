@@ -70,11 +70,10 @@ public class StartGitHubVerificationCommand implements Command {
             <code>https://github.com/ivanov</code>
             
             <b>⚠️Важно!</b>
-            <b>В информацию профиля GitHub должно быть внесёно имя пользователя Telegram (UID), с которого вы отправляете данную заявку</b>
+            <b>В профиле GitHub, во время рассмотрения заявки, должно быть указано имя пользователя Telegram (UID)</b>
             
             <i>В противном случае заявка будет отклонена</i>
             
-            После одобрения заявки можете убрать UID из профиля GitHub
             <b>Отправьте ссылку сейчас:</b>
             """;
 

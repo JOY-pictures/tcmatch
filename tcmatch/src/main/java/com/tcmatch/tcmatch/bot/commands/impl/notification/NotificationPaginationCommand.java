@@ -9,6 +9,7 @@ import com.tcmatch.tcmatch.model.Notification;
 import com.tcmatch.tcmatch.model.dto.PaginationContext;
 import com.tcmatch.tcmatch.service.NotificationService;
 import com.tcmatch.tcmatch.service.PaginationManager;
+import com.tcmatch.tcmatch.service.UserSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,7 @@ public class NotificationPaginationCommand implements Command {
     private final CommonKeyboards commonKeyboards;
     private final NotificationKeyboards notificationKeyboards;
     private final NotificationService notificationService;
+    private final UserSessionService userSessionService;
 
     @Override
     public boolean canHandle(String actionType, String action) {
@@ -120,6 +122,7 @@ public class NotificationPaginationCommand implements Command {
             InlineKeyboardMarkup keyboard = notificationKeyboards.createNotificationItemKeyboard(n.getId());
 
             Integer cardId = botExecutor.sendHtmlMessageReturnId(chatId, notificationText, keyboard);
+
             if (cardId != null) messageIds.add(cardId);
         }
 

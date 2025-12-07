@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcmatch.tcmatch.model.Transaction;
 import com.tcmatch.tcmatch.payment.yoomoney.dto.YooMoneyNotification;
 import com.tcmatch.tcmatch.repository.TransactionRepository;
-import com.tcmatch.tcmatch.service.SubscriptionPaymentService;
+import com.tcmatch.tcmatch.service.BalancePaymentService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +30,7 @@ public class YYNotificationController {
     @Value("${app.base-url}")
     private String baseUrl;
 
-    private final SubscriptionPaymentService paymentService;
+    private final BalancePaymentService paymentService;
 
     @GetMapping("/info")
     public Map<String, String> getInfo(HttpServletRequest request) {

@@ -250,11 +250,18 @@ public class CommonKeyboards {
         if (user.getRole().equals(UserRole.FREELANCER)) {
             List<InlineKeyboardButton> row3 = new ArrayList<>();
             row3.add(InlineKeyboardButton.builder()
-                    .text("💰 Тарифы")
+                    .text("🔥 Тарифы")
                     .callbackData("subscription:show_menu") // 🔥 Новая команда!
                     .build());
             rows.add(row3);
         }
+
+        List<InlineKeyboardButton> rowWallet = new ArrayList<>();
+        rowWallet.add(InlineKeyboardButton.builder()
+                .text("💰 Кошелёк")
+                .callbackData("wallet:show")
+                .build());
+        rows.add(rowWallet);
 
         // 🔥 ДОБАВЛЯЕМ КНОПКУ АДМИНА ЕСЛИ ПОЛЬЗОВАТЕЛЬ - АДМИН
         if (adminService.isAdmin(chatId)) {

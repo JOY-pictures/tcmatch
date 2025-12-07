@@ -117,7 +117,7 @@ public class ApplicationNotificationService {
     private String createFreelancerOrderNotification(Order order, UserDto customer, UserDto freelancer) {
         // Логика из предыдущего шага, перенесенная сюда
         return String.format("""
-            <b>🥳 ПОЗДРАВЛЯЕМ! ВАШ ОТКЛИК ПРИНЯТ!</b>
+            <blockquote><b>🥳 ПОЗДРАВЛЯЕМ! ВАШ ОТКЛИК ПРИНЯТ!</b>
             
             Заказчик принял ваш отклик на проект <code>%d</code>.
             Создан новый заказ №%d.
@@ -135,8 +135,7 @@ public class ApplicationNotificationService {
             
             <b>⚠️ НАЧНИТЕ РАБОТУ!</b>
             
-            Свяжитесь с заказчиком и убедитесь.
-            
+            Свяжитесь с заказчиком.</blockquote>
             """,
                 order.getProjectId(),
                 order.getId(),

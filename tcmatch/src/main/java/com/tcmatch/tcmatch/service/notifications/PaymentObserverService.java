@@ -2,11 +2,13 @@ package com.tcmatch.tcmatch.service.notifications;
 
 import com.tcmatch.tcmatch.bot.BotExecutor;
 import com.tcmatch.tcmatch.bot.keyboards.SubscriptionKeyboards;
+import com.tcmatch.tcmatch.bot.keyboards.WalletKeyboards;
 import com.tcmatch.tcmatch.events.PaymentCompletedEvent;
 import com.tcmatch.tcmatch.model.UserSession;
 import com.tcmatch.tcmatch.model.enums.SubscriptionTier;
 import com.tcmatch.tcmatch.service.NotificationService;
 import com.tcmatch.tcmatch.service.UserSessionService;
+import com.tcmatch.tcmatch.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -14,6 +16,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,30 +27,33 @@ public class PaymentObserverService {
 
     private final BotExecutor botExecutor;
     private final UserSessionService userSessionService;
-    private final SubscriptionKeyboards subscriptionKeyboards;
+    private final WalletKeyboards walletKeyboards;
     private final NotificationService notificationService; // 🔥 Добавили
+    private final WalletService walletService; // Добавляем для получения баланса
+
 
     /**
      * 🔥 Отправка сообщения с кнопкой оплаты
      */
-    public Integer sendPaymentLinkMessage(Long chatId, String paymentUrl,
-                                          SubscriptionTier tier, String paymentId) {
+    public Integer sendPaymentLinkMessage(Long chatId, String paymentUrl, BigDecimal amount, String paymentId) {
+
 
         String paymentText = String.format("""
-            💰 <b>ССЫЛКА ДЛЯ ОПЛАТЫ</b>
+            💰 <b>Пополнение баланса</b>
             
-            <blockquote>Тариф: <b>%s</b>
-            Сумма: <b>%.0f ₽</b>
+            Сумма пополнения: <b>%s ₽</b>
             
-            Нажмите кнопку ниже для оплаты через ЮKassa.</blockquote>
+            Нажмите кнопку ниже для оплаты через ЮKassa.
             
             ⏱️ <i>Ссылка действительна 15 минут</i>
+            
+            <code>ID платежа: %s</code>
             """,
-                tier.getDisplayName(),
-                tier.getPrice()
+                formatAmount(amount),
+                paymentId.substring(0, Math.min(paymentId.length(), 8))
         );
 
-        InlineKeyboardMarkup keyboard = subscriptionKeyboards.createPaymentLinkKeyboard(paymentUrl);
+        InlineKeyboardMarkup keyboard = walletKeyboards.createPaymentLinkKeyboard(paymentUrl);
 
         // Отправляем сообщение
         Integer messageId = botExecutor.sendHtmlMessageReturnId(chatId, paymentText, keyboard);
@@ -178,21 +184,18 @@ public class PaymentObserverService {
             <blockquote>
             🎉 <b>ОПЛАТА УСПЕШНА!</b>
             
-            ✅ Тариф: <b>%s</b> активирован.
-            💰 Сумма: <b>%.0f ₽</b>
+            💰 Вы пополнили баланс на сумму: <b>%.0f ₽</b>
+            
             📋 ID платежа: <code>%s</code>
             
             Спасибо за покупку! 🚀</blockquote>
             """,
-                event.getTier().getDisplayName(),
                 event.getAmount(),
                 event.getPaymentId().substring(0, 8)
         );
 
-        String callbackData = String.format("payment:details:%s", event.getPaymentId());
-
         // 🔥 ИСПОЛЬЗУЕМ CENTRAL NOTIFICATION SERVICE
-        notificationService.createNotification(chatId, text, callbackData);
+        notificationService.createNotification(chatId, text, "");
 
         log.info("📨 Уведомление об успешной оплате создано через NotificationService");
     }
@@ -215,11 +218,14 @@ public class PaymentObserverService {
                 event.getMessage()
         );
 
-        String callbackData = String.format("payment:retry:%s", event.getPaymentId());
-
         // 🔥 ИСПОЛЬЗУЕМ CENTRAL NOTIFICATION SERVICE
-        notificationService.createNotification(chatId, text, callbackData);
+        notificationService.createNotification(chatId, text, null);
 
         log.info("📨 Уведомление об отмене платежа создано через NotificationService");
+    }
+
+    private String formatAmount(BigDecimal amount) {
+        if (amount == null) return "0.00";
+        return String.format("%,.2f", amount);
     }
 }

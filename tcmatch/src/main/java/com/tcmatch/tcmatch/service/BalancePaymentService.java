@@ -23,29 +23,32 @@ import java.util.UUID;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SubscriptionPaymentService {
+public class BalancePaymentService {
 
     private final YooMoneyClient yooMoneyClient;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionRepository transactionRepository;
-    private final SubscriptionService subscriptionService;
+    // 🔥 Инжектируем наш сервис кошелька для пополнения баланса
+    private final WalletService walletService;
 
     @Transactional
-    public PaymentInfo generatePaymentUrl(Long chatId, SubscriptionTier selectedTier, Double amountToPay) {
-// 1. Создание ключа идемпотентности
-        log.info("🔄 Начало генерации payment URL: chatId={}, tier={}, amount={}",
-                chatId, selectedTier, amountToPay);
+    public PaymentInfo generatePaymentUrl(Long chatId, BigDecimal amountToPay) {
+        log.info("🔄 Начало генерации payment URL для пополнения баланса: chatId={}, amount={}",
+                chatId, amountToPay);
+
+        // Использование BigDecimal для расчетов в YooKassa тоже, если API это поддерживает
+        Double amountForYooKassa = amountToPay.doubleValue();
 
         try {
             UUID idempotenceKey = UUID.randomUUID();
-            String description = String.format("Покупка тарифа %s для пользователя %d",
-                    selectedTier.getDisplayName(), chatId);
+            String description = String.format("Пополнение баланса (Chat ID: %d) на сумму %s RUB",
+                    chatId, amountToPay); // Описание теперь о пополнении
 
             log.info("📤 Создание платежа в ЮKassa: description={}, idempotenceKey={}",
                     description, idempotenceKey);
 
             YooMoneyPaymentResponse response = yooMoneyClient.createPayment(
-                    amountToPay,
+                    amountForYooKassa, // Используем double, как у вас было
                     description,
                     idempotenceKey
             );
@@ -53,15 +56,12 @@ public class SubscriptionPaymentService {
             log.info("✅ Ответ от ЮKassa: paymentId={}, status={}",
                     response.getId(), response.getStatus());
 
-            String paymentId = response.getId();
-
             // 🔥 КРИТИЧЕСКИЙ МОМЕНТ - СОХРАНЕНИЕ
             Transaction transaction = new Transaction(
                     response.getId(),
                     chatId,
                     idempotenceKey,
-                    selectedTier,
-                    amountToPay
+                    amountForYooKassa
             );
 
             Transaction saved = transactionRepository.save(transaction);
@@ -70,9 +70,8 @@ public class SubscriptionPaymentService {
 
             log.info("🔗 Confirmation URL: {}", response.getConfirmation().getConfirmationUrl());
 
-            // 3. 🔥 Возвращаем объект с paymentId и URL
             return new PaymentInfo(
-                    paymentId,
+                    response.getId(),
                     response.getConfirmation().getConfirmationUrl()
             );
         } catch (Exception e) {
@@ -104,63 +103,59 @@ public class SubscriptionPaymentService {
         }
 
         Long chatId = tx.getChatId();
-        SubscriptionTier tier = tx.getTier();
+        // SubscriptionTier tier = tx.getTier(); // Больше не используется
         Double amount = tx.getAmount();
 
-        log.info("💰 Найдена транзакция: chatId={}, tier={}, amount={}",
-                chatId, tier, amount);
+        log.info("💰 Найдена транзакция: chatId={}, amount={}", chatId, amount);
 
         if ("succeeded".equals(status)) {
-            handleSuccessfulPayment(tx, chatId, paymentId, tier, amount);
+            handleSuccessfulPayment(tx, chatId, paymentId, amount);
         } else if ("canceled".equals(status)) {
-            handleCanceledPayment(tx, chatId, paymentId, tier, amount);
+            handleCanceledPayment(tx, chatId, paymentId, amount);
         }
     }
 
-    private void handleSuccessfulPayment(Transaction tx, Long chatId, String paymentId,
-                                         SubscriptionTier tier, Double amount) {
+    // 🔥 ИЗМЕНЕН: Удалена привязка к подписке. Теперь вызывается WalletService.deposit()
+    private void handleSuccessfulPayment(Transaction tx, Long chatId, String paymentId, Double amount) {
         try {
-            log.info("✅ Обработка успешного платежа: {}", paymentId);
+            log.info("✅ Обработка успешного платежа для пополнения: {}", paymentId);
 
-            // Активация подписки
-            subscriptionService.upgradeSubscription(chatId, tier);
+            // 🔥 ГЛАВНОЕ ИЗМЕНЕНИЕ: Пополняем баланс пользователя
+            walletService.deposit(chatId, new BigDecimal(String.valueOf(amount)));
 
             // Обновление транзакции
             tx.setStatus(TransactionStatus.SUCCEEDED);
             tx.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(tx);
 
-            log.info("🎉 Подписка {} активирована для {}", tier, chatId);
+            log.info("🎉 Баланс пользователя {} успешно пополнен на {}", chatId, amount);
 
             // 🔥 ПУБЛИКАЦИЯ СОБЫТИЯ
             eventPublisher.publishEvent(new PaymentCompletedEvent(
                     this,
                     chatId,
                     paymentId,
-                    tier,
                     true,
-                    "Платеж успешно завершен",
+                    "Баланс успешно пополнен",
                     amount
             ));
 
         } catch (Exception e) {
-            log.error("❌ Ошибка активации подписки: {}", e.getMessage(), e);
+            log.error("❌ Ошибка при пополнении баланса: {}", e.getMessage(), e);
 
             // 🔥 ПУБЛИКАЦИЯ СОБЫТИЯ ОБ ОШИБКЕ
             eventPublisher.publishEvent(new PaymentCompletedEvent(
                     this,
                     chatId,
                     paymentId,
-                    tier,
                     false,
-                    "Ошибка активации подписки: " + e.getMessage(),
+                    "Ошибка пополнения баланса: " + e.getMessage(),
                     amount
             ));
         }
     }
 
-    private void handleCanceledPayment(Transaction tx, Long chatId, String paymentId,
-                                       SubscriptionTier tier, Double amount) {
+    private void handleCanceledPayment(Transaction tx, Long chatId, String paymentId, Double amount) {
         log.info("❌ Обработка отмененного платежа: {}", paymentId);
 
         // Обновление транзакции
@@ -175,7 +170,6 @@ public class SubscriptionPaymentService {
                 this,
                 chatId,
                 paymentId,
-                tier,
                 false,
                 "Платеж отменен пользователем",
                 amount

@@ -22,6 +22,20 @@ import java.util.List;
 @AllArgsConstructor
 public class Order {
 
+    /**
+     * Статус заморозки средств для Escrow.
+     * PENDING: Ожидает заморозки средств.
+     * FROZEN: Средства заморожены (заказ в работе).
+     * RELEASED: Средства выплачены исполнителю.
+     * REFUNDED: Средства возвращены заказчику.
+     */
+    public enum EscrowStatus {
+        PENDING,
+        FROZEN,
+        RELEASED,
+        REFUNDED
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -62,6 +76,12 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;
+
+    // 🔥 НОВОЕ ПОЛЕ: Статус заморозки средств
+    @Enumerated(EnumType.STRING)
+    @Column(name = "escrow_status", nullable = false)
+    @Builder.Default
+    private EscrowStatus escrowStatus = EscrowStatus.PENDING;
 
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;

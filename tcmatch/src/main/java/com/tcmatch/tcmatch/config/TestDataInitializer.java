@@ -94,6 +94,7 @@ public class TestDataInitializer {
             userService.updateUserRole(chatId, role);
             user.setIsVerified(true);
             user.setVerificationMethod("TEST_DATA");
+            userService.acceptRules(chatId);
             userService.updateProfessionalInfo(chatId, specialization, "Middle", skills);
             return user;
 

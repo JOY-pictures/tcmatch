@@ -55,6 +55,6 @@ public class TextCommandDispatcher {
             • Используйте кнопки для всех действий
             """;
 
-        botExecutor.sendTemporaryErrorMessage(chatId, hintText, 10);
+        botExecutor.sendTemporaryErrorMessageWithHtml(chatId, hintText, 10);
     }
 }
