@@ -32,6 +32,10 @@ public class UserService {
     @Autowired
     private SubscriptionService subscriptionService;
 
+    @Lazy
+    @Autowired
+    private WalletService walletService;
+
     @Transactional
     public User registerFromTelegram(Long chatId, String username, String firstName, String lastName) {
         Optional<User> existingUser = userRepository.findByChatId(chatId);
@@ -62,6 +66,8 @@ public class UserService {
                 .registeredAt(LocalDateTime.now())
                 .lastActivityAt(LocalDateTime.now())
                 .build();
+
+        walletService.initializeWallet(chatId);
 
         User savedUser = userRepository.save(user);
         log.info("✅ Создан пользователь: {}", savedUser);

@@ -22,7 +22,8 @@ public class ShowProfileCommand implements Command {
 
     private final UserService userService;
     private final CommonKeyboards commonKeyboards;
-    private final ProfileKeyboards profileKeyboards;    private final BotExecutor botExecutor;
+    private final ProfileKeyboards profileKeyboards;
+    private final BotExecutor botExecutor;
 
     @Override
     public boolean canHandle(String actionType, String action) {

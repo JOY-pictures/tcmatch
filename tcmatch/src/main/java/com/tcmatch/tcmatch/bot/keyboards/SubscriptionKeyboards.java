@@ -113,7 +113,7 @@ public class SubscriptionKeyboards {
         // 2. Если тариф BASIC/PRO - показываем кнопку "Улучшить" с более дорогими тарифами
         // 3. Если тариф FREE - показываем все платные тарифы
 
-        if (currentTier == SubscriptionTier.UNLIMITED) {
+        if (currentTier == SubscriptionTier.PRO) {
             // UNLIMITED - самый высокий тариф
             if (isSubscriptionNearExpiry(subscriptionEndsAt, 5)) {
                 // Если подписка заканчивается через <=5 дней, показываем продление

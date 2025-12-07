@@ -321,7 +321,7 @@ public class TCMatchBot extends TelegramLongPollingBot implements BotExecutor{
             execute(deleteMessage);
         } catch (TelegramApiException e) {
             // Обычно не логируем, чтобы не засорять логи при нормальном поведении (например, сообщение уже удалено)
-            // log.warn("Ошибка при удалении сообщения: {}", e.getMessage());
+            log.warn("Ошибка при удалении сообщения: {}", e.getMessage());
         }
     }
 
@@ -384,7 +384,7 @@ public class TCMatchBot extends TelegramLongPollingBot implements BotExecutor{
         try {
             SendMessage message = new SendMessage();
             message.setChatId(chatId.toString());
-            message.setText("❌ " + errorText);
+            message.setText(errorText);
 
             org.telegram.telegrambots.meta.api.objects.Message sentMessage = execute(message);
             Integer messageId = sentMessage.getMessageId();
@@ -506,7 +506,7 @@ public class TCMatchBot extends TelegramLongPollingBot implements BotExecutor{
             SendMessage message = new SendMessage();
             message.setParseMode("HTML");
             message.setChatId(chatId.toString());
-            message.setText("❌ " + errorText);
+            message.setText(errorText);
 
             org.telegram.telegrambots.meta.api.objects.Message sentMessage = execute(message);
             Integer messageId = sentMessage.getMessageId();

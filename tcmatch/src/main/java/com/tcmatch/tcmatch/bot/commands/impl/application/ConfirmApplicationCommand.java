@@ -151,7 +151,6 @@ public class ConfirmApplicationCommand implements Command {
             // Получаем тарифы для вывода
             SubscriptionTier basic = SubscriptionTier.BASIC;
             SubscriptionTier pro = SubscriptionTier.PRO;
-            SubscriptionTier unlimited = SubscriptionTier.UNLIMITED;
 
             String usedCount = check.getMonthlyLimit() == -1
                     ? "не ограничено"
@@ -184,7 +183,7 @@ public class ConfirmApplicationCommand implements Command {
 
                     basic.getDisplayName(), basic.getMonthlyApplicationLimit(), basic.getPrice(),
                     pro.getDisplayName(), pro.getMonthlyApplicationLimit(), pro.getPrice(),
-                    unlimited.getDisplayName(), 0, unlimited.getPrice() // 0 для UNL выглядит лучше, чем Integer.MAX_VALUE
+                    pro.getDisplayName(), 0, pro.getPrice() // 0 для UNL выглядит лучше, чем Integer.MAX_VALUE
             );
     }
 }
