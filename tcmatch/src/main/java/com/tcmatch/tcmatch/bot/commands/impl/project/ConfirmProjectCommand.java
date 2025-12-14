@@ -71,7 +71,8 @@ public class ConfirmProjectCommand implements Command {
                     project.getTitle(),
                     project.getBudget(),
                     project.getEstimatedDays(),
-                    project.getRequiredSkills()
+                    project.getRequiredSkills(
+                    )
             );
 
             userSessionService.resetToMain(chatId);
