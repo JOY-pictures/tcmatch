@@ -32,5 +32,15 @@ build/
 ### VS Code ###
 .vscode/
 
+src/main/resources/application.properties
+src/main/resources/application.yml
+
+*.p12
+*.jks
+*.key
+
+*.log
+*.class
+
 .env
 *.env
