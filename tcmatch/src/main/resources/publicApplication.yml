@@ -1,0 +1,60 @@
+server:
+  # Настройки для разработки, можно заменить на 8080
+  port: 8080
+  shutdown: graceful
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+spring:
+  # Профиль, который активен по умолчанию, если не переопределен локальным файлом
+  profiles:
+    active: dev
+  application:
+    name: tcmatch
+
+# --- Настройки H2 для быстрого локального тестирования ---
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:mem:tcmatchdb
+    username: sa
+    password: 123
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    defer-datasource-initialization: true
+    properties:
+      javax:
+        persistence:
+          validation:
+            mode: none
+  sql:
+    init:
+      mode: always
+
+logging:
+  level:
+    com.tcmatch: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+# --- ЗАГЛУШКИ ДЛЯ СЕКРЕТОВ ---
+telegram:
+  bot:
+    username: TCMatchBotPlaceholder
+    token: 000000000:PLACEHOLDER
+
+yoomoney:
+  shopId: 0
+  secretKey: placeholder_secret_key
+  returnUrl: http://localhost:8080/payment/success
+  notificationUrl: http://localhost:8080/api/v1/payment/notify
