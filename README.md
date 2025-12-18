@@ -69,15 +69,15 @@ admin:
 server:
   # Настройки для SSL/Cloudpub (если не используете, можно закомментировать)
   ssl:
-    key-store-password: u0740562149 # Ваш реальный пароль
+    key-store-password: u07... # Ваш реальный пароль
 
 telegram:
   bot:
-    token: 7984996902:AAFJo3bwYyk_gC0riMenFDK2MV2IJKg-gqA # Ваш настоящий токен
+    token: 7984996902:AAFJo3b... # Ваш настоящий токен
 
 yoomoney:
   shopId: 1218176
-  secretKey: test_BSMXFx9KeUJjYTZdOn2L8yfjAVjTpvW5DCIHIOJYrzI # Ваш тестовый ключ
+  secretKey: test_BSMXFx9KeUJjYTZdO... # Ваш тестовый ключ
 
 
 2. Запуск
